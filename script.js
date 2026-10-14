@@ -41,13 +41,11 @@ function safeOnClick(id, handler) {
   if (el) el.onclick = handler;
 }
 
-// 昼版（3:00〜17:59）/ 夜版（18:00〜2:59）
 function getInitialTimeSlot() {
   const h = new Date().getHours();
   return (h >= 3 && h < 18) ? "day" : "night";
 }
 
-// 岡山県内かどうかの判定（ジオフェンシング）
 function isInsideOkayama(lat, lng, address) {
   const inCoords = (lat >= 34.25 && lat <= 35.38 && lng >= 133.30 && lng <= 134.45);
   const inAddress = typeof address === 'string' && (
@@ -60,7 +58,6 @@ function isInsideOkayama(lat, lng, address) {
   return inCoords || inAddress;
 }
 
-// 住所から緯度経度を自動計算（ジオコーディング）
 async function geocodeAddress(address) {
   if (!address || address.trim() === "") return null;
   try {
@@ -90,12 +87,15 @@ let announcementsData = [];
 let aiMasterSpotsData = [];
 let masterBadgesData = [];
 let stampRalliesData = [];
+let notificationsData = [];
 let appAboutData = null;
 let mapInstance = null;
 let mapMarkers = [];
 let userCurrentLocationMarker = null;
-let currentUploadedBase64 = "";
-let currentUploadedFile = null;
+
+// 複数画像ファイル管理
+let currentUploadedFiles = [];
+let currentUploadedImagesBase64 = [];
 let currentAvatarBase64 = "";
 let currentLatitude = 34.6618;
 let currentLongitude = 133.9350;
@@ -104,6 +104,7 @@ let currentSortMode = "newest";
 let currentProfileTab = "posts";
 let currentModalUserIds = [];
 let currentDmTargetUserId = null;
+let currentReplyingCommentId = null;
 
 // ページネーション管理
 let currentPostPage = 0;
@@ -112,7 +113,7 @@ let hasMorePosts = true;
 let isLoadingPosts = false;
 
 // ====================================================
-// 1. 初期化・Supabaseデータ取得
+// 1. 初期化・データ取得
 // ====================================================
 async function initApp() {
   updateUserUI();
@@ -176,6 +177,7 @@ async function initApp() {
             username: me.user_id,
             nickname: me.nickname,
             bio: me.bio,
+            email: me.email || "",
             avatar: me.avatar || "",
             is_admin: me.is_admin || false,
             following: parseArray(me.following),
@@ -183,10 +185,14 @@ async function initApp() {
             bookmarks: parseArray(me.bookmarks),
             achievements: parseArray(me.achievements),
             featured_badges: parseArray(me.featured_badges),
-            stamps: parseArray(me.stamps)
+            stamps: parseArray(me.stamps),
+            blocked_users: parseArray(me.blocked_users),
+            muted_users: parseArray(me.muted_users),
+            notify_settings: me.notify_settings || { likes: true, comments: true, follows: true }
           };
           localStorage.setItem("okatari_user", JSON.stringify(currentUser));
           updateUserUI();
+          fetchNotifications();
         }
       }
     } catch (e) {
@@ -207,14 +213,11 @@ async function initApp() {
   renderStampRallies();
   renderAboutPage();
 
-  // ★ 追加: シェアされたリンク（?post=xxx）から開いた場合、その投稿を自動表示
   const urlParams = new URLSearchParams(window.location.search);
   const targetPostId = urlParams.get("post");
   if (targetPostId) {
     const targetPost = postsData.find(p => p.id === targetPostId);
-    if (targetPost) {
-      setTimeout(() => openDetail(targetPost), 400);
-    }
+    if (targetPost) setTimeout(() => openDetail(targetPost), 400);
   }
 }
 
@@ -253,43 +256,151 @@ async function fetchPostsPaged(reset = false) {
   isLoadingPosts = false;
 }
 
-// Supabase Storageへの画像アップロード
-async function uploadImageToStorage() {
-  if (!db || !currentUploadedBase64) {
-    return "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80";
+// ====================================================
+// ★ 複数枚画像のStorageアップロード
+// ====================================================
+async function uploadMultipleImagesToStorage(base64Array) {
+  if (!db || !base64Array || base64Array.length === 0) return [];
+  const urls = [];
+
+  for (let i = 0; i < base64Array.length; i++) {
+    try {
+      const b64 = base64Array[i];
+      const byteString = atob(b64.split(',')[1]);
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let j = 0; j < byteString.length; j++) ia[j] = byteString.charCodeAt(j);
+      const blob = new Blob([ab], { type: 'image/jpeg' });
+
+      const fileName = `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+      const filePath = `spots/${fileName}`;
+
+      const { error: uploadError } = await db.storage
+        .from('post_images')
+        .upload(filePath, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+
+      if (!uploadError) {
+        const { data } = db.storage.from('post_images').getPublicUrl(filePath);
+        urls.push(data.publicUrl);
+      } else {
+        urls.push(b64);
+      }
+    } catch (err) {
+      urls.push(base64Array[i]);
+    }
+  }
+  return urls;
+}
+
+// ====================================================
+// ★ 通知の送信・取得
+// ====================================================
+async function sendNotification(toUserId, type, postId = null, postTitle = null) {
+  if (!db || !currentUser || currentUser.userId === toUserId) return;
+
+  const targetUser = allUsersData.find(u => u.user_id === toUserId);
+  if (targetUser && targetUser.notify_settings) {
+    const settings = typeof targetUser.notify_settings === 'string' ? JSON.parse(targetUser.notify_settings) : targetUser.notify_settings;
+    if (type === 'like' && !settings.likes) return;
+    if (type === 'comment' && !settings.comments) return;
+    if (type === 'follow' && !settings.follows) return;
   }
 
-  try {
-    const byteString = atob(currentUploadedBase64.split(',')[1]);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-      ia[i] = byteString.charCodeAt(i);
+  const newNotify = {
+    id: generateUniqueId("notif"),
+    to_user_id: toUserId,
+    from_user_id: currentUser.userId,
+    from_nickname: currentUser.nickname,
+    type: type,
+    post_id: postId,
+    post_title: postTitle,
+    is_read: false
+  };
+
+  await db.from("notifications").insert([newNotify]);
+}
+
+async function fetchNotifications() {
+  if (!db || !currentUser) return;
+  const { data } = await db
+    .from("notifications")
+    .select("*")
+    .eq("to_user_id", currentUser.userId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (data) {
+    notificationsData = data;
+    const unreadCount = data.filter(n => !n.is_read).length;
+    
+    const mBadge = document.getElementById("mobileNotifyCount");
+    const sBadge = document.getElementById("sidebarNotifyCount");
+
+    if (mBadge) {
+      mBadge.textContent = unreadCount;
+      mBadge.style.display = unreadCount > 0 ? "inline-block" : "none";
     }
-    const blob = new Blob([ab], { type: 'image/jpeg' });
-
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
-    const filePath = `spots/${fileName}`;
-
-    const { error: uploadError } = await db.storage
-      .from('post_images')
-      .upload(filePath, blob, { 
-        contentType: 'image/jpeg', 
-        cacheControl: '3600', 
-        upsert: false 
-      });
-
-    if (uploadError) {
-      console.warn("Storage保存に失敗したためBase64で保存します:", uploadError.message);
-      return currentUploadedBase64;
+    if (sBadge) {
+      sBadge.textContent = unreadCount;
+      sBadge.style.display = unreadCount > 0 ? "inline-block" : "none";
     }
-
-    const { data } = db.storage.from('post_images').getPublicUrl(filePath);
-    return data.publicUrl;
-  } catch (err) {
-    console.warn("Storage例外:", err);
-    return currentUploadedBase64;
   }
+}
+
+function openNotificationsModal() {
+  if (!currentUser) { alert("ログインが必要です"); return; }
+  const container = document.getElementById("notifyListContainer");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (notificationsData.length === 0) {
+    container.innerHTML = `<div class="empty-state">新しい通知はありません</div>`;
+  } else {
+    notificationsData.forEach(n => {
+      const item = document.createElement("div");
+      item.className = `notify-item ${n.is_read ? '' : 'unread'}`;
+      let icon = '<i class="fa-solid fa-bell"></i>';
+      let text = '';
+
+      if (n.type === 'like') {
+        icon = '<div class="notify-icon like"><i class="fa-solid fa-heart"></i></div>';
+        text = `<b>${n.from_nickname}</b> さんがあなたの投稿「${n.post_title || 'スポット'}」にいいねしました`;
+      } else if (n.type === 'comment') {
+        icon = '<div class="notify-icon comment"><i class="fa-solid fa-comment"></i></div>';
+        text = `<b>${n.from_nickname}</b> さんがあなたの投稿「${n.post_title || 'スポット'}」にコメントしました`;
+      } else if (n.type === 'follow') {
+        icon = '<div class="notify-icon follow"><i class="fa-solid fa-user-plus"></i></div>';
+        text = `<b>${n.from_nickname}</b> さんにフォローされました`;
+      }
+
+      item.innerHTML = `
+        ${icon}
+        <div style="flex:1;">${text}</div>
+      `;
+
+      item.onclick = async () => {
+        if (!n.is_read && db) {
+          n.is_read = true;
+          await db.from("notifications").update({ is_read: true }).eq("id", n.id);
+          fetchNotifications();
+        }
+        if (n.post_id) {
+          const p = postsData.find(x => x.id === n.post_id);
+          if (p) {
+            document.getElementById("notifyModal").classList.remove("show");
+            openDetail(p);
+          }
+        } else if (n.type === 'follow') {
+          document.getElementById("notifyModal").classList.remove("show");
+          openUserProfile(n.from_user_id, n.from_nickname);
+        }
+      };
+
+      container.appendChild(item);
+    });
+  }
+
+  document.getElementById("notifyModal").classList.add("show");
 }
 
 // ====================================================
@@ -344,12 +455,14 @@ function setupNavigation() {
   if (appMain) {
     appMain.addEventListener("scroll", () => {
       if (appMain.scrollTop + appMain.clientHeight >= appMain.scrollHeight - 300) {
-        if (hasMorePosts && !isLoadingPosts) {
-          fetchPostsPaged();
-        }
+        if (hasMorePosts && !isLoadingPosts) fetchPostsPaged();
       }
     });
   }
+
+  safeOnClick("mobileNotifyBellBtn", openNotificationsModal);
+  safeOnClick("openNotifyModalBtn", openNotificationsModal);
+  safeOnClick("closeNotifyModalBtn", () => document.getElementById("notifyModal").classList.remove("show"));
 
   safeOnClick("goNewsPageBtn", () => {
     document.querySelectorAll('[data-tab="tabNewsPage"]').forEach(el => el.click());
@@ -357,8 +470,7 @@ function setupNavigation() {
 
   safeOnClick("claimCodeBtnNav", () => {
     if (!currentUser) { alert("ログインが必要です"); return; }
-    const m = document.getElementById("claimAchievementModal");
-    if (m) m.classList.add("show");
+    document.getElementById("claimAchievementModal").classList.add("show");
   });
 
   safeOnClick("goToSettingsBtn", openSettingsPage);
@@ -372,19 +484,15 @@ function setupNavigation() {
 
   safeOnClick("pTabMyPostsBtn", () => {
     currentProfileTab = "posts";
-    const b1 = document.getElementById("pTabMyPostsBtn");
-    const b2 = document.getElementById("pTabBookmarksBtn");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
+    document.getElementById("pTabMyPostsBtn").classList.add("active");
+    document.getElementById("pTabBookmarksBtn").classList.remove("active");
     renderMyProfileSpots();
   });
 
   safeOnClick("pTabBookmarksBtn", () => {
     currentProfileTab = "bookmarks";
-    const b1 = document.getElementById("pTabBookmarksBtn");
-    const b2 = document.getElementById("pTabMyPostsBtn");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
+    document.getElementById("pTabBookmarksBtn").classList.add("active");
+    document.getElementById("pTabMyPostsBtn").classList.remove("active");
     renderMyProfileSpots();
   });
 }
@@ -394,34 +502,39 @@ function openSettingsPage() {
   const userIdEl = document.getElementById("settingsUserId");
   const nick = document.getElementById("settingsNickname");
   const bio = document.getElementById("settingsBio");
-  
+  const emailEl = document.getElementById("settingsEmail");
+  const nLikes = document.getElementById("notifySettingLikes");
+  const nCmts = document.getElementById("notifySettingComments");
+  const nFollows = document.getElementById("notifySettingFollows");
+
   if (userIdEl) userIdEl.value = currentUser.userId || "";
   if (nick) nick.value = currentUser.nickname || "";
   if (bio) bio.value = currentUser.bio || "";
-  const preview = document.getElementById("settingsAvatarPreview");
-  if (preview) {
-    preview.innerHTML = currentUser.avatar ? `<img src="${currentUser.avatar}">` : `<i class="fa-solid fa-user"></i>`;
+  if (emailEl) emailEl.value = currentUser.email || "";
+
+  if (currentUser.notify_settings) {
+    const s = currentUser.notify_settings;
+    if (nLikes) nLikes.checked = s.likes !== false;
+    if (nCmts) nCmts.checked = s.comments !== false;
+    if (nFollows) nFollows.checked = s.follows !== false;
   }
+
+  const preview = document.getElementById("settingsAvatarPreview");
+  if (preview) preview.innerHTML = currentUser.avatar ? `<img src="${currentUser.avatar}">` : `<i class="fa-solid fa-user"></i>`;
   currentAvatarBase64 = currentUser.avatar || "";
   
   document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-  const tab = document.getElementById("tabSettings");
-  if (tab) tab.classList.add("active");
-  const title = document.getElementById("pageTitle");
-  if (title) title.textContent = "アカウント設定";
+  document.getElementById("tabSettings").classList.add("active");
+  document.getElementById("pageTitle").textContent = "アカウント設定";
 }
 
 function openMobileDrawer() {
-  const d = document.getElementById("mobileDrawer");
-  const o = document.getElementById("drawerOverlay");
-  if (d) d.classList.add("show");
-  if (o) o.classList.add("show");
+  document.getElementById("mobileDrawer").classList.add("show");
+  document.getElementById("drawerOverlay").classList.add("show");
 }
 function closeMobileDrawer() {
-  const d = document.getElementById("mobileDrawer");
-  const o = document.getElementById("drawerOverlay");
-  if (d) d.classList.remove("show");
-  if (o) o.classList.remove("show");
+  document.getElementById("mobileDrawer").classList.remove("show");
+  document.getElementById("drawerOverlay").classList.remove("show");
 }
 
 function updateTimeModeUI() {
@@ -451,9 +564,7 @@ function setTimeMode(mode) {
 }
 
 function isPostMatchTimeMode(post, mode) {
-  if (post.time_slot && post.time_slot !== "all") {
-    return post.time_slot === mode;
-  }
+  if (post.time_slot && post.time_slot !== "all") return post.time_slot === mode;
   const nightKeywords = ["夜", "夜景", "ディナー", "居酒屋", "バー", "ライトアップ", "夕日", "イルミネーション"];
   const text = `${post.title || ""} ${post.tags || ""} ${post.description || ""}`.toLowerCase();
   const isNightSpot = nightKeywords.some(kw => text.includes(kw));
@@ -549,14 +660,11 @@ function openNewsDetail(item) {
   const imgHtml = item.image_url ? `<img src="${item.image_url}" onerror="this.style.display='none'" style="width:100%; max-height:260px; object-fit:cover; border-radius:var(--radius-md); margin-bottom:14px;">` : '';
   content.innerHTML = `
     ${imgHtml}
-    <div style="margin-bottom:8px;">
-      <span class="news-badge">${item.badge || 'INFO'}</span>
-    </div>
+    <div style="margin-bottom:8px;"><span class="news-badge">${item.badge || 'INFO'}</span></div>
     <h2 style="font-size:17px; font-weight:700; margin-bottom:12px;">${item.title}</h2>
     <div style="font-size:13px; color:var(--text-primary); line-height:1.7; white-space:pre-wrap;">${item.content || item.sub_text || '詳細情報はありません。'}</div>
   `;
-  const m = document.getElementById("newsDetailModal");
-  if (m) m.classList.add("show");
+  document.getElementById("newsDetailModal").classList.add("show");
 }
 
 // ====================================================
@@ -585,6 +693,12 @@ function updateMapMarkers(filterQuery = "") {
   const query = filterQuery.trim().toLowerCase();
 
   postsData.forEach(p => {
+    // ブロック・ミュートしたユーザーの投稿は非表示
+    if (currentUser) {
+      if ((currentUser.blocked_users || []).includes(p.user_id)) return;
+      if ((currentUser.muted_users || []).includes(p.user_id)) return;
+    }
+
     if (!isPostMatchTimeMode(p, currentActiveTimeMode)) return;
 
     if (p.lat && p.lng && isPreciseAddress(p.address)) {
@@ -600,9 +714,10 @@ function updateMapMarkers(filterQuery = "") {
       const lng = parseFloat(p.lng);
       if (lat >= 34.0 && lat <= 35.6 && lng >= 133.0 && lng <= 134.8) {
         const marker = L.marker([lat, lng]).addTo(mapInstance);
+        const mainImg = (p.images && p.images[0]) || p.image_url || 'https://via.placeholder.com/140x80?text=OKATRI';
         const popupHtml = `
           <div style="font-size:12px; min-width:140px; text-align:center;">
-            <img src="${p.image_url}" onerror="this.src='https://via.placeholder.com/140x80?text=OKATRI'" style="width:100%; height:80px; object-fit:cover; border-radius:4px; margin-bottom:6px;">
+            <img src="${mainImg}" onerror="this.src='https://via.placeholder.com/140x80?text=OKATRI'" style="width:100%; height:80px; object-fit:cover; border-radius:4px; margin-bottom:6px;">
             <b style="font-size:13px;">${p.title}</b><br>
             <span style="color:var(--text-secondary); font-size:11px;">${p.address}</span><br>
             <button onclick="openDetailFromMap('${p.id}')" style="margin-top:6px; background:#0f172a; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">詳細を見る</button>
@@ -655,12 +770,18 @@ window.openDetailFromMap = function(postId) {
 };
 
 // ====================================================
-// 6. 投稿一覧 ＆ 昼夜フィルター
+// 6. 投稿一覧 ＆ 複数枚スライダー表示
 // ====================================================
 function applySortAndRender() {
   let list = [...postsData];
   const searchInput = document.getElementById("searchInput");
   const query = searchInput ? searchInput.value.toLowerCase() : "";
+
+  // ブロック/ミュートされたユーザーの投稿を除外
+  if (currentUser) {
+    list = list.filter(p => !(currentUser.blocked_users || []).includes(p.user_id));
+    list = list.filter(p => !(currentUser.muted_users || []).includes(p.user_id));
+  }
 
   list = list.filter(p => isPostMatchTimeMode(p, currentActiveTimeMode));
 
@@ -699,12 +820,34 @@ function renderPosts(items) {
     const avatarHtml = authorUser && authorUser.avatar ? `<img src="${authorUser.avatar}" class="card-avatar-sm" alt="avatar">` : `<i class="fa-regular fa-user" style="font-size:11px; color:#94a3b8;"></i>`;
     const adminBadge = authorUser && authorUser.is_admin ? `<span class="admin-badge">OFFICIAL</span>` : '';
 
+    // 複数画像のスライド（カルーセル）生成
+    const imagesList = parseArray(item.images);
+    const displayImages = imagesList.length > 0 ? imagesList : [item.image_url || 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80'];
+
+    let carouselHtml = '';
+    if (displayImages.length > 1) {
+      carouselHtml = `
+        <div class="carousel-container">
+          <div class="carousel-track">
+            ${displayImages.map(img => `<div class="carousel-slide"><img src="${img}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'"></div>`).join('')}
+          </div>
+          <div class="carousel-dots">
+            ${displayImages.map((_, idx) => `<span class="carousel-dot ${idx === 0 ? 'active' : ''}"></span>`).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      carouselHtml = `
+        <div class="card-img-wrap">
+          <img src="${displayImages[0]}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" class="card-img" alt="${item.title}">
+        </div>
+      `;
+    }
+
     const card = document.createElement("div");
     card.className = "spot-card";
     card.innerHTML = `
-      <div class="card-img-wrap">
-        <img src="${item.image_url || 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80'}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" class="card-img" alt="${item.title}">
-      </div>
+      ${carouselHtml}
       <div class="card-body">
         <div class="card-area">@${item.area}</div>
         <div class="card-title">${item.title}</div>
@@ -727,8 +870,7 @@ function renderPosts(items) {
       </div>
     `;
 
-    card.querySelector(".card-img-wrap").onclick = () => openDetail(item);
-    card.querySelector(".card-title").onclick = () => openDetail(item);
+    card.onclick = () => openDetail(item);
     card.querySelector(".like-btn").onclick = (e) => { e.stopPropagation(); toggleLike(item.id); };
     card.querySelector(".bm-btn").onclick = (e) => { e.stopPropagation(); toggleBookmark(item.id); };
 
@@ -754,6 +896,10 @@ function renderUserSearch(users) {
   container.innerHTML = "";
 
   let filtered = users.filter(u => u.user_id !== "guest");
+  if (currentUser) {
+    filtered = filtered.filter(u => !(currentUser.blocked_users || []).includes(u.user_id));
+  }
+
   if (query) {
     filtered = filtered.filter(u => 
       (u.nickname && u.nickname.toLowerCase().includes(query)) ||
@@ -786,7 +932,7 @@ function renderUserSearch(users) {
 }
 
 // ====================================================
-// 8. 相手プロフィール ＆ フォロー ＆ DM
+// 8. 相手プロフィール ＆ ブロック・ミュート
 // ====================================================
 function openUserProfile(userId, fallbackNickname) {
   const targetUser = allUsersData.find(u => u.user_id === userId) || { user_id: userId, nickname: fallbackNickname, bio: "岡山の旅を共有しています" };
@@ -817,11 +963,13 @@ function openUserProfile(userId, fallbackNickname) {
   const isFollowing = currentUser && (currentUser.following || []).includes(userId);
   const fBtn = document.getElementById("upModalFollowBtn");
   const dmBtn = document.getElementById("upModalDmBtn");
+  const blockBtn = document.getElementById("upModalBlockBtn");
   const isMe = currentUser && currentUser.userId === userId;
 
   if (isMe) {
     if (fBtn) fBtn.style.display = "none";
     if (dmBtn) dmBtn.style.display = "none";
+    if (blockBtn) blockBtn.style.display = "none";
   } else {
     if (fBtn) {
       fBtn.style.display = "inline-flex";
@@ -835,6 +983,10 @@ function openUserProfile(userId, fallbackNickname) {
         openDmChatPage(targetUser.user_id, targetUser.nickname);
       };
     }
+    if (blockBtn) {
+      blockBtn.style.display = "inline-flex";
+      blockBtn.onclick = () => openBlockMuteMenu(targetUser);
+    }
   }
 
   const userPosts = postsData.filter(p => p.user_id === userId);
@@ -847,7 +999,8 @@ function openUserProfile(userId, fallbackNickname) {
       userPosts.forEach(p => {
         const d = document.createElement("div");
         d.className = "spot-card";
-        d.innerHTML = `<div class="card-img-wrap"><img src="${p.image_url}" class="card-img"></div><div class="card-body"><div class="card-title">${p.title}</div></div>`;
+        const mainImg = (p.images && p.images[0]) || p.image_url;
+        d.innerHTML = `<div class="card-img-wrap"><img src="${mainImg}" class="card-img"></div><div class="card-body"><div class="card-title">${p.title}</div></div>`;
         d.onclick = () => { modal.classList.remove("show"); openDetail(p); };
         grid.appendChild(d);
       });
@@ -855,6 +1008,49 @@ function openUserProfile(userId, fallbackNickname) {
   }
 
   modal.classList.add("show");
+}
+
+function openBlockMuteMenu(targetUser) {
+  if (!currentUser) return;
+  const isBlocked = (currentUser.blocked_users || []).includes(targetUser.user_id);
+  const isMuted = (currentUser.muted_users || []).includes(targetUser.user_id);
+
+  const action = prompt(`【ユーザー設定: @${targetUser.user_id}】\n1: ${isMuted ? 'ミュート解除' : 'ミュートする（投稿を非表示）'}\n2: ${isBlocked ? 'ブロック解除' : 'ブロックする（相互非表示）'}\n\n番号を入力してください (1 または 2):`);
+
+  if (action === "1") {
+    currentUser.muted_users = currentUser.muted_users || [];
+    if (isMuted) {
+      currentUser.muted_users = currentUser.muted_users.filter(id => id !== targetUser.user_id);
+      alert(`@${targetUser.user_id} のミュートを解除しました。`);
+    } else {
+      currentUser.muted_users.push(targetUser.user_id);
+      alert(`@${targetUser.user_id} をミュートしました。`);
+    }
+    saveUserBlockMute();
+  } else if (action === "2") {
+    currentUser.blocked_users = currentUser.blocked_users || [];
+    if (isBlocked) {
+      currentUser.blocked_users = currentUser.blocked_users.filter(id => id !== targetUser.user_id);
+      alert(`@${targetUser.user_id} のブロックを解除しました。`);
+    } else {
+      currentUser.blocked_users.push(targetUser.user_id);
+      alert(`@${targetUser.user_id} をブロックしました。`);
+      document.getElementById("userProfileModal").classList.remove("show");
+    }
+    saveUserBlockMute();
+  }
+}
+
+async function saveUserBlockMute() {
+  localStorage.setItem("okatari_user", JSON.stringify(currentUser));
+  applySortAndRender();
+  updateMapMarkers();
+  if (db) {
+    await db.from("users_custom").update({
+      blocked_users: currentUser.blocked_users,
+      muted_users: currentUser.muted_users
+    }).eq("user_id", currentUser.userId);
+  }
 }
 
 async function openDmChatPage(targetUserId, targetNickname) {
@@ -866,10 +1062,8 @@ async function openDmChatPage(targetUserId, targetNickname) {
   if (list) list.innerHTML = `<div style="text-align:center; font-size:12px; color:#94a3b8;">メッセージを読み込み中...</div>`;
   
   document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-  const tab = document.getElementById("tabDm");
-  if (tab) tab.classList.add("active");
-  const pTitle = document.getElementById("pageTitle");
-  if (pTitle) pTitle.textContent = "メッセージ";
+  document.getElementById("tabDm").classList.add("active");
+  document.getElementById("pageTitle").textContent = "メッセージ";
 
   if (db && list) {
     const { data } = await db.from("messages")
@@ -899,8 +1093,7 @@ function openUserListModal(title, userIds) {
   const s = document.getElementById("userListSearchInput");
   if (s) s.value = "";
   renderModalUserList(currentModalUserIds);
-  const m = document.getElementById("userListModal");
-  if (m) m.classList.add("show");
+  document.getElementById("userListModal").classList.add("show");
 }
 
 function renderModalUserList(userIds) {
@@ -936,10 +1129,8 @@ function renderModalUserList(userIds) {
         <span style="font-size:11px; color:var(--text-secondary); font-weight:500;">プロフィール <i class="fa-solid fa-arrow-right"></i></span>
       `;
       row.onclick = () => {
-        const uModal = document.getElementById("userListModal");
-        const pModal = document.getElementById("userProfileModal");
-        if (uModal) uModal.classList.remove("show");
-        if (pModal) pModal.classList.remove("show");
+        document.getElementById("userListModal").classList.remove("show");
+        document.getElementById("userProfileModal").classList.remove("show");
         openUserProfile(u.user_id, u.nickname);
       };
       container.appendChild(row);
@@ -956,6 +1147,7 @@ async function toggleFollowUser(targetUserId) {
 
   if (isNowFollowing) {
     currentUser.following.push(targetUserId);
+    sendNotification(targetUserId, 'follow');
   } else {
     currentUser.following.splice(myFollowingIdx, 1);
   }
@@ -992,7 +1184,7 @@ async function toggleFollowUser(targetUserId) {
 }
 
 // ====================================================
-// 9. マイページ（セット中バッジ詳細対応）
+// 9. マイページ
 // ====================================================
 function renderMyProfileSpots() {
   const grid = document.getElementById("myProfileSpotsGrid");
@@ -1027,9 +1219,10 @@ function renderMyProfileSpots() {
   targetList.forEach(p => {
     const card = document.createElement("div");
     card.className = "spot-card";
+    const mainImg = (p.images && p.images[0]) || p.image_url;
     card.innerHTML = `
       <div class="card-img-wrap">
-        <img src="${p.image_url}" class="card-img" alt="${p.title}">
+        <img src="${mainImg}" class="card-img" alt="${p.title}">
       </div>
       <div class="card-body">
         <div class="card-area">@${p.area}</div>
@@ -1089,13 +1282,11 @@ function openAchievementDetailModal(badge) {
   if (btn) {
     btn.onclick = () => {
       toggleFeaturedBadge(badge.title);
-      const m = document.getElementById("achievementDetailModal");
-      if (m) m.classList.remove("show");
+      document.getElementById("achievementDetailModal").classList.remove("show");
     };
   }
 
-  const modal = document.getElementById("achievementDetailModal");
-  if (modal) modal.classList.add("show");
+  document.getElementById("achievementDetailModal").classList.add("show");
 }
 
 // ====================================================
@@ -1317,46 +1508,36 @@ function openCreateRallyModal() {
     }
   }
 
-  const m = document.getElementById("createRallyModal");
-  if (m) m.classList.add("show");
+  document.getElementById("createRallyModal").classList.add("show");
 }
 
-// 投稿編集モーダルを開く
 function openEditPostModal(post) {
-  const pId = document.getElementById("editPostId");
-  const pTitle = document.getElementById("editPostTitle");
-  const pArea = document.getElementById("editPostArea");
-  const pSlot = document.getElementById("editPostTimeSlot");
-  const pTags = document.getElementById("editPostTags");
-  const pAddr = document.getElementById("editPostAddress");
-  const pUrl = document.getElementById("editPostExternalUrl");
-  const pDesc = document.getElementById("editPostDescription");
+  document.getElementById("editPostId").value = post.id;
+  document.getElementById("editPostTitle").value = post.title || "";
+  document.getElementById("editPostArea").value = post.area || "岡山市";
+  document.getElementById("editPostTimeSlot").value = post.time_slot || "all";
+  document.getElementById("editPostTags").value = post.tags || "";
+  document.getElementById("editPostAddress").value = post.address || "";
+  document.getElementById("editPostExternalUrl").value = post.external_url || "";
+  document.getElementById("editPostDescription").value = post.description || "";
 
-  if (pId) pId.value = post.id;
-  if (pTitle) pTitle.value = post.title || "";
-  if (pArea) pArea.value = post.area || "岡山市";
-  if (pSlot) pSlot.value = post.time_slot || "all";
-  if (pTags) pTags.value = post.tags || "";
-  if (pAddr) pAddr.value = post.address || "";
-  if (pUrl) pUrl.value = post.external_url || "";
-  if (pDesc) pDesc.value = post.description || "";
-
-  const dModal = document.getElementById("detailModal");
-  if (dModal) dModal.classList.remove("show");
-
-  const eModal = document.getElementById("editPostModal");
-  if (eModal) eModal.classList.add("show");
+  document.getElementById("detailModal").classList.remove("show");
+  document.getElementById("editPostModal").classList.add("show");
 }
 
 // ====================================================
-// 10. 投稿詳細（★ シェア ＆ 編集ボタン対応）
+// 10. 投稿詳細（★ カルーセル・スレッド・シェア対応）
 // ====================================================
 function openDetail(item) {
   const content = document.getElementById("detailContent");
   if (!content) return;
   const isMine = currentUser && currentUser.userId === item.user_id;
   const isOfficial = currentUser && currentUser.is_admin;
+  
+  // スレッドコメントの抽出
   const postComments = commentsData.filter(c => c.post_id === item.id);
+  const rootComments = postComments.filter(c => !c.parent_id);
+
   const likes = parseArray(item.likes);
   const isLiked = currentUser && likes.includes(currentUser.userId);
   const isBookmarked = currentUser && currentUser.bookmarks && currentUser.bookmarks.includes(item.id);
@@ -1365,8 +1546,28 @@ function openDetail(item) {
   const adminBadge = authorUser && authorUser.is_admin ? `<span class="admin-badge">OFFICIAL</span>` : '';
   const tagsHtml = (item.tags || '').split(' ').filter(t => t.startsWith('#')).map(t => `<span class="tag-badge" onclick="filterByTag('${t}'); document.getElementById('detailModal').classList.remove('show');">${t}</span>`).join('');
 
+  // 複数画像のスライド
+  const imagesList = parseArray(item.images);
+  const displayImages = imagesList.length > 0 ? imagesList : [item.image_url || 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80'];
+
+  let imageHtml = '';
+  if (displayImages.length > 1) {
+    imageHtml = `
+      <div class="carousel-container" style="border-radius:var(--radius-md); margin-bottom:12px;">
+        <div class="carousel-track">
+          ${displayImages.map(img => `<div class="carousel-slide"><img src="${img}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'"></div>`).join('')}
+        </div>
+        <div class="carousel-dots">
+          ${displayImages.map((_, idx) => `<span class="carousel-dot ${idx === 0 ? 'active' : ''}"></span>`).join('')}
+        </div>
+      </div>
+    `;
+  } else {
+    imageHtml = `<img src="${displayImages[0]}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" style="width:100%; height:260px; object-fit:cover; border-radius:var(--radius-md); margin-bottom:12px; border:1px solid var(--border-subtle);">`;
+  }
+
   content.innerHTML = `
-    <img src="${item.image_url}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" style="width:100%; height:260px; object-fit:cover; border-radius:var(--radius-md); margin-bottom:12px; border:1px solid var(--border-subtle);">
+    ${imageHtml}
     
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
       <span style="color:var(--primary-accent); font-weight:600; font-size:12px;">@${item.area}</span>
@@ -1416,16 +1617,14 @@ function openDetail(item) {
       ${isMine ? `<button id="deletePostBtn" class="btn-danger"><i class="fa-regular fa-trash-can"></i> 削除</button>` : ''}
     </div>
 
-    <!-- コメント欄 -->
+    <!-- コメント＆スレッド返信欄 -->
     <div class="comment-section">
       <h3 class="sub-heading" style="margin-top:0;"><i class="fa-regular fa-comment"></i> コメント (${postComments.length})</h3>
+      
+      <div id="replyingIndicatorBox"></div>
+
       <div class="comment-list" id="detailCommentList">
-        ${postComments.map(c => `
-          <div class="comment-item">
-            <span class="comment-author">${c.nickname} (@${c.user_id})</span>
-            <div style="margin-top:2px;">${c.comment}</div>
-          </div>
-        `).join('') || '<div style="font-size:12px; color:#94a3b8;">まだコメントはありません</div>'}
+        ${renderCommentTreeHtml(rootComments, postComments)}
       </div>
       <div class="comment-input-row">
         <input type="text" id="newCommentInput" placeholder="コメントを入力...">
@@ -1434,45 +1633,27 @@ function openDetail(item) {
     </div>
   `;
 
-  const m = document.getElementById("detailModal");
-  if (m) m.classList.add("show");
+  document.getElementById("detailModal").classList.add("show");
 
   // シェア
-  // シェア（★ 投稿専用パーマリンク生成 ＆ 正しいURL送信）
   const baseUrl = window.location.origin + window.location.pathname;
   const postUrl = `${baseUrl}?post=${encodeURIComponent(item.id)}`;
   const shareText = `【OKATRI】岡山のスポット「${item.title}」(@${item.area})`;
 
-  // X（旧Twitter）でシェア
   safeOnClick("sharePostXBtn", () => {
-    const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(postUrl)}&hashtags=オカトリ,岡山旅行`;
-    window.open(xUrl, '_blank');
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(postUrl)}&hashtags=オカトリ,岡山旅行`, '_blank');
   });
 
-  // LINEで送る（文章とURLを確実にトークに貼り付け）
   safeOnClick("sharePostLineBtn", () => {
-    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(`${shareText}\n${postUrl}`)}`;
-    window.open(lineUrl, '_blank');
+    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(`${shareText}\n${postUrl}`)}`, '_blank');
   });
 
-  // URLをコピー
   safeOnClick("sharePostCopyBtn", () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(postUrl);
-    } else {
-      // 古い端末用の代替
-      const tempInput = document.createElement("input");
-      tempInput.value = postUrl;
-      document.body.appendChild(tempInput);
-      tempInput.select();
-      document.execCommand("copy");
-      document.body.removeChild(tempInput);
-    }
+    if (navigator.clipboard) navigator.clipboard.writeText(postUrl);
     alert(`投稿の専用URLをコピーしました！\n${postUrl}`);
   });
 
   safeOnClick("openEditPostBtn", () => openEditPostModal(item));
-
   safeOnClick("detailLikeBtn", () => { toggleLike(item.id); openDetail(item); });
   safeOnClick("detailBmBtn", () => { toggleBookmark(item.id); openDetail(item); });
 
@@ -1498,7 +1679,7 @@ function openDetail(item) {
 
   safeOnClick("reportPostBtn", async () => {
     if (!currentUser) { alert("ログインが必要です"); return; }
-    const reason = prompt("通報の理由を入力してください（不適切な内容、スパム等）:");
+    const reason = prompt("通報の理由を入力してください:");
     if (!reason || reason.trim() === "") return;
 
     if (db) {
@@ -1513,14 +1694,12 @@ function openDetail(item) {
   });
 
   safeOnClick("detailUserBtn", () => {
-    const dModal = document.getElementById("detailModal");
-    if (dModal) dModal.classList.remove("show");
+    document.getElementById("detailModal").classList.remove("show");
     openUserProfile(item.user_id, item.nickname);
   });
 
   safeOnClick("setStartSpotBtn", () => {
-    const dModal = document.getElementById("detailModal");
-    if (dModal) dModal.classList.remove("show");
+    document.getElementById("detailModal").classList.remove("show");
     document.querySelectorAll('[data-tab="tabRoutes"]').forEach(el => el.click());
     const select = document.getElementById("routeStartSelect");
     if (select) {
@@ -1538,11 +1717,11 @@ function openDetail(item) {
     applySortAndRender();
     renderMyProfileSpots();
     updateMapMarkers();
-    const dModal = document.getElementById("detailModal");
-    if (dModal) dModal.classList.remove("show");
+    document.getElementById("detailModal").classList.remove("show");
     if (db) await db.from("posts").delete().eq("id", item.id);
   });
 
+  // コメント送信（返信・スレッド・通知対応）
   safeOnClick("addCommentBtn", async () => {
     const input = document.getElementById("newCommentInput");
     if (!input) return;
@@ -1554,25 +1733,85 @@ function openDetail(item) {
       post_id: item.id,
       user_id: currentUser ? currentUser.userId : "guest",
       nickname: currentUser ? currentUser.nickname : "匿名",
-      comment: val
+      comment: val,
+      parent_id: currentReplyingCommentId
     };
 
     commentsData.push(newCmt);
+    currentReplyingCommentId = null;
     input.value = "";
     openDetail(item);
 
-    if (db) await db.from("comments").insert([newCmt]);
+    if (db) {
+      await db.from("comments").insert([newCmt]);
+      // 投稿者に通知を送信
+      sendNotification(item.user_id, 'comment', item.id, item.title);
+    }
   });
 }
 
+// スレッドコメントHTML生成
+function renderCommentTreeHtml(rootComments, allComments) {
+  if (rootComments.length === 0) return '<div style="font-size:12px; color:#94a3b8;">まだコメントはありません</div>';
+
+  return rootComments.map(c => {
+    const replies = allComments.filter(r => r.parent_id === c.id);
+    const repliesHtml = replies.map(r => `
+      <div class="comment-item reply">
+        <span class="comment-author">${r.nickname} (@${r.user_id})</span>
+        <div style="margin-top:2px;">${r.comment}</div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="comment-item">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span class="comment-author">${c.nickname} (@${c.user_id})</span>
+          <span class="reply-badge" onclick="setReplyTarget('${c.id}', '${c.nickname}')"><i class="fa-solid fa-reply"></i> 返信</span>
+        </div>
+        <div style="margin-top:2px;">${c.comment}</div>
+      </div>
+      ${repliesHtml}
+    `;
+  }).join('');
+}
+
+window.setReplyTarget = function(commentId, nickname) {
+  currentReplyingCommentId = commentId;
+  const box = document.getElementById("replyingIndicatorBox");
+  if (box) {
+    box.innerHTML = `
+      <div class="replying-indicator">
+        <span><b>@${nickname}</b> に返信中</span>
+        <button onclick="cancelReplyTarget()" style="background:none; border:none; cursor:pointer; color:var(--primary-accent);"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    `;
+  }
+  const input = document.getElementById("newCommentInput");
+  if (input) input.focus();
+};
+
+window.cancelReplyTarget = function() {
+  currentReplyingCommentId = null;
+  const box = document.getElementById("replyingIndicatorBox");
+  if (box) box.innerHTML = "";
+};
+
+// いいね（通知付き）
 async function toggleLike(postId) {
   if (!currentUser) { alert("ログインが必要です"); return; }
   const post = postsData.find(p => p.id === postId);
   if (!post) return;
   let likes = parseArray(post.likes);
   const idx = likes.indexOf(currentUser.userId);
-  if (idx >= 0) likes.splice(idx, 1);
-  else likes.push(currentUser.userId);
+  const isNowLiked = idx < 0;
+
+  if (isNowLiked) {
+    likes.push(currentUser.userId);
+    sendNotification(post.user_id, 'like', post.id, post.title);
+  } else {
+    likes.splice(idx, 1);
+  }
   post.likes = likes;
   applySortAndRender();
   if (db) await db.from("posts").update({ likes: likes }).eq("id", postId);
@@ -1659,9 +1898,7 @@ ${masterContext || '岡山後楽園、倉敷美観地区、問屋町カフェ通
             text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
             const startIdx = text.indexOf('[');
             const endIdx = text.lastIndexOf(']');
-            if (startIdx !== -1 && endIdx !== -1) {
-              text = text.substring(startIdx, endIdx + 1);
-            }
+            if (startIdx !== -1 && endIdx !== -1) text = text.substring(startIdx, endIdx + 1);
             plan = JSON.parse(text);
             if (Array.isArray(plan) && plan.length > 0) {
               isGeminiSuccess = true;
@@ -1681,9 +1918,7 @@ ${masterContext || '岡山後楽園、倉敷美観地区、問屋町カフェ通
         let mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(start)}/`;
         plan.forEach(item => {
           timeline.innerHTML += `<li><b>${item.time} ${item.name}</b><br><span style="color:var(--text-secondary); font-size:12px;">${item.desc}</span></li>`;
-          if (item.name !== `${start} 出発`) {
-            mapUrl += `${encodeURIComponent(item.name.replace(/^🎯 /, ''))}/`;
-          }
+          if (item.name !== `${start} 出発`) mapUrl += `${encodeURIComponent(item.name.replace(/^🎯 /, ''))}/`;
         });
 
         const mapLink = document.getElementById("googleMapsLink");
@@ -1718,7 +1953,6 @@ ${masterContext || '岡山後楽園、倉敷美観地区、問屋町カフェ通
   });
 }
 
-// 自由選択ルート生成
 function renderRouteSpotCheckboxes() {
   const container = document.getElementById("routeSpotCheckboxes");
   const searchInput = document.getElementById("routeSpotSearch");
@@ -1860,55 +2094,46 @@ function setupEventListeners() {
   safeOnClick("closeDrawerBtn", closeMobileDrawer);
   safeOnClick("drawerOverlay", closeMobileDrawer);
 
-  safeOnClick("closePostModalBtn", () => { const m = document.getElementById("postModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("cancelPostBtn", () => { const m = document.getElementById("postModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeDetailModalBtn", () => { const m = document.getElementById("detailModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeUserProfileModalBtn", () => { const m = document.getElementById("userProfileModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeUserListModalBtn", () => { const m = document.getElementById("userListModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeNewsDetailModalBtn", () => { const m = document.getElementById("newsDetailModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeClaimAchievementModalBtn", () => { const m = document.getElementById("claimAchievementModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeAuthModalBtn", () => { const m = document.getElementById("authModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeAchDetailModalBtn", () => { const m = document.getElementById("achievementDetailModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeCreateRallyModalBtn", () => { const m = document.getElementById("createRallyModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("cancelCreateRallyBtn", () => { const m = document.getElementById("createRallyModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("closeCreateBadgeModalBtn", () => { const m = document.getElementById("createBadgeModal"); if (m) m.classList.remove("show"); });
-  safeOnClick("cancelCreateBadgeBtn", () => { const m = document.getElementById("createBadgeModal"); if (m) m.classList.remove("show"); });
+  safeOnClick("closePostModalBtn", () => document.getElementById("postModal").classList.remove("show"));
+  safeOnClick("cancelPostBtn", () => document.getElementById("postModal").classList.remove("show"));
+  safeOnClick("closeDetailModalBtn", () => document.getElementById("detailModal").classList.remove("show"));
+  safeOnClick("closeUserProfileModalBtn", () => document.getElementById("userProfileModal").classList.remove("show"));
+  safeOnClick("closeUserListModalBtn", () => document.getElementById("userListModal").classList.remove("show"));
+  safeOnClick("closeNewsDetailModalBtn", () => document.getElementById("newsDetailModal").classList.remove("show"));
+  safeOnClick("closeClaimAchievementModalBtn", () => document.getElementById("claimAchievementModal").classList.remove("show"));
+  safeOnClick("closeAuthModalBtn", () => document.getElementById("authModal").classList.remove("show"));
+  safeOnClick("closeAchDetailModalBtn", () => document.getElementById("achievementDetailModal").classList.remove("show"));
+  safeOnClick("closeCreateRallyModalBtn", () => document.getElementById("createRallyModal").classList.remove("show"));
+  safeOnClick("cancelCreateRallyBtn", () => document.getElementById("createRallyModal").classList.remove("show"));
+  safeOnClick("closeCreateBadgeModalBtn", () => document.getElementById("createBadgeModal").classList.remove("show"));
+  safeOnClick("cancelCreateBadgeBtn", () => document.getElementById("createBadgeModal").classList.remove("show"));
 
   // 昼夜切り替えボタン
   safeOnClick("setTimeDayBtn", () => setTimeMode("day"));
   safeOnClick("setTimeNightBtn", () => setTimeMode("night"));
 
   // 公式ボタン
-  safeOnClick("openCreateBadgeModalBtn", () => {
-    const m = document.getElementById("createBadgeModal");
-    if (m) m.classList.add("show");
-  });
+  safeOnClick("openCreateBadgeModalBtn", () => document.getElementById("createBadgeModal").classList.add("show"));
   safeOnClick("openCreateRallyModalBtn", openCreateRallyModal);
 
   // ルートシェア
   safeOnClick("shareRouteXBtn", () => {
-    const titleEl = document.getElementById("routeResultTitle");
-    const mapLink = document.getElementById("googleMapsLink");
-    const title = titleEl ? titleEl.textContent : "岡山観光プラン";
-    const mapUrl = mapLink ? mapLink.href : window.location.href;
+    const title = document.getElementById("routeResultTitle").textContent;
+    const mapUrl = document.getElementById("googleMapsLink").href;
     const text = `【OKATRI】岡山の観光モデルコースを作成しました！\nルート: ${title}\n#オカトリ #岡山観光 #旅行プラン`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(mapUrl)}`, '_blank');
   });
 
   safeOnClick("shareRouteLineBtn", () => {
-    const titleEl = document.getElementById("routeResultTitle");
-    const mapLink = document.getElementById("googleMapsLink");
-    const title = titleEl ? titleEl.textContent : "岡山観光プラン";
-    const mapUrl = mapLink ? mapLink.href : window.location.href;
+    const title = document.getElementById("routeResultTitle").textContent;
+    const mapUrl = document.getElementById("googleMapsLink").href;
     const text = `【OKATRI】岡山旅行モデルコース: ${title}\nGoogleマップナビ: ${mapUrl}`;
     window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(text)}`, '_blank');
   });
 
   safeOnClick("shareRouteCopyBtn", () => {
-    const titleEl = document.getElementById("routeResultTitle");
-    const mapLink = document.getElementById("googleMapsLink");
-    const title = titleEl ? titleEl.textContent : "岡山観光プラン";
-    const mapUrl = mapLink ? mapLink.href : window.location.href;
+    const title = document.getElementById("routeResultTitle").textContent;
+    const mapUrl = document.getElementById("googleMapsLink").href;
     navigator.clipboard.writeText(`【OKATRI 岡山旅行プラン】\n${title}\nナビURL: ${mapUrl}`);
     alert("ルート情報をコピーしました！メッセージ等に貼り付けて共有できます。");
   });
@@ -1956,8 +2181,7 @@ function setupEventListeners() {
       const prev = document.getElementById("badgePreviewBox");
       if (prev) prev.innerHTML = "";
       badgeImageBase64 = "";
-      const m = document.getElementById("createBadgeModal");
-      if (m) m.classList.remove("show");
+      document.getElementById("createBadgeModal").classList.remove("show");
     };
   }
 
@@ -2002,8 +2226,7 @@ function setupEventListeners() {
 
       alert(`🎉 スタンプラリー「${title}」を公開しました！`);
       rallyForm.reset();
-      const m = document.getElementById("createRallyModal");
-      if (m) m.classList.remove("show");
+      document.getElementById("createRallyModal").classList.remove("show");
     };
   }
 
@@ -2063,35 +2286,24 @@ function setupEventListeners() {
       renderMyProfileSpots();
 
       alert("投稿を更新しました！");
-      const eModal = document.getElementById("editPostModal");
-      if (eModal) eModal.classList.remove("show");
+      document.getElementById("editPostModal").classList.remove("show");
       openDetail(targetPost);
     };
   }
 
-  safeOnClick("closeEditPostModalBtn", () => {
-    const m = document.getElementById("editPostModal");
-    if (m) m.classList.remove("show");
-  });
-  safeOnClick("cancelEditPostBtn", () => {
-    const m = document.getElementById("editPostModal");
-    if (m) m.classList.remove("show");
-  });
+  safeOnClick("closeEditPostModalBtn", () => document.getElementById("editPostModal").classList.remove("show"));
+  safeOnClick("cancelEditPostBtn", () => document.getElementById("editPostModal").classList.remove("show"));
 
   safeOnClick("sortNewestBtn", () => {
     currentSortMode = "newest";
-    const b1 = document.getElementById("sortNewestBtn");
-    const b2 = document.getElementById("sortPopularBtn");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
+    document.getElementById("sortNewestBtn").classList.add("active");
+    document.getElementById("sortPopularBtn").classList.remove("active");
     applySortAndRender();
   });
   safeOnClick("sortPopularBtn", () => {
     currentSortMode = "popular";
-    const b1 = document.getElementById("sortPopularBtn");
-    const b2 = document.getElementById("sortNewestBtn");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
+    document.getElementById("sortPopularBtn").classList.add("active");
+    document.getElementById("sortNewestBtn").classList.remove("active");
     applySortAndRender();
   });
 
@@ -2116,24 +2328,16 @@ function setupEventListeners() {
   if (routeSpotSearch) routeSpotSearch.oninput = renderRouteSpotCheckboxes;
 
   safeOnClick("modeCustomBtn", () => {
-    const b1 = document.getElementById("modeCustomBtn");
-    const b2 = document.getElementById("modeAiBtn");
-    const cBox = document.getElementById("customRouteBox");
-    const aBox = document.getElementById("aiRouteBox");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
-    if (cBox) cBox.style.display = "block";
-    if (aBox) aBox.style.display = "none";
+    document.getElementById("modeCustomBtn").classList.add("active");
+    document.getElementById("modeAiBtn").classList.remove("active");
+    document.getElementById("customRouteBox").style.display = "block";
+    document.getElementById("aiRouteBox").style.display = "none";
   });
   safeOnClick("modeAiBtn", () => {
-    const b1 = document.getElementById("modeAiBtn");
-    const b2 = document.getElementById("modeCustomBtn");
-    const cBox = document.getElementById("customRouteBox");
-    const aBox = document.getElementById("aiRouteBox");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
-    if (cBox) cBox.style.display = "none";
-    if (aBox) aBox.style.display = "block";
+    document.getElementById("modeAiBtn").classList.add("active");
+    document.getElementById("modeCustomBtn").classList.remove("active");
+    document.getElementById("customRouteBox").style.display = "none";
+    document.getElementById("aiRouteBox").style.display = "block";
   });
 
   safeOnClick("generateRouteBtn", () => {
@@ -2157,12 +2361,9 @@ function setupEventListeners() {
       if (mapLink) mapLink.href = mapUrl;
     }
 
-    const rTitle = document.getElementById("routeResultTitle");
-    if (rTitle) rTitle.textContent = "自由選択ルート";
-    const placeholder = document.getElementById("routePlaceholder");
-    const rArea = document.getElementById("routeResultArea");
-    if (placeholder) placeholder.style.display = "none";
-    if (rArea) rArea.style.display = "block";
+    document.getElementById("routeResultTitle").textContent = "自由選択ルート";
+    document.getElementById("routePlaceholder").style.display = "none";
+    document.getElementById("routeResultArea").style.display = "block";
   });
 
   safeOnClick("showCurrentPosOnMapBtn", () => {
@@ -2196,8 +2397,7 @@ function setupEventListeners() {
   if (claimForm) {
     claimForm.onsubmit = async (e) => {
       e.preventDefault();
-      const codeInput = document.getElementById("achievementCodeInput");
-      const code = (codeInput ? codeInput.value.trim() : "").toUpperCase();
+      const code = document.getElementById("achievementCodeInput").value.trim().toUpperCase();
       const targetBadge = masterBadgesData.find(b => b.code && b.code.toUpperCase() === code);
 
       if (!targetBadge) {
@@ -2208,8 +2408,7 @@ function setupEventListeners() {
       currentUser.achievements = currentUser.achievements || [];
       if (currentUser.achievements.some(a => a.title === targetBadge.title)) {
         alert(`すでに「${targetBadge.title}」を獲得しています。`);
-        const m = document.getElementById("claimAchievementModal");
-        if (m) m.classList.remove("show");
+        document.getElementById("claimAchievementModal").classList.remove("show");
         return;
       }
 
@@ -2230,8 +2429,7 @@ function setupEventListeners() {
       }
 
       alert(`🎉 「${targetBadge.title}」を獲得しました！`);
-      const m = document.getElementById("claimAchievementModal");
-      if (m) m.classList.remove("show");
+      document.getElementById("claimAchievementModal").classList.remove("show");
     };
   }
 
@@ -2291,7 +2489,7 @@ function setupEventListeners() {
   if (avatarPosY) avatarPosY.addEventListener("input", renderCroppedAvatar);
   if (avatarZoom) avatarZoom.addEventListener("input", renderCroppedAvatar);
 
-  // プロフィール設定保存（★ ユーザーID変更対応）
+  // プロフィール設定保存（★ メール＆通知設定対応）
   const profileForm = document.getElementById("profileSettingsForm");
   if (profileForm) {
     profileForm.onsubmit = async (e) => {
@@ -2299,9 +2497,20 @@ function setupEventListeners() {
       const uEl = document.getElementById("settingsUserId");
       const nEl = document.getElementById("settingsNickname");
       const bEl = document.getElementById("settingsBio");
+      const eEl = document.getElementById("settingsEmail");
+      const nLikes = document.getElementById("notifySettingLikes");
+      const nCmts = document.getElementById("notifySettingComments");
+      const nFollows = document.getElementById("notifySettingFollows");
+
       const newUserId = (uEl ? uEl.value.trim() : currentUser.userId);
       const newNick = (nEl ? nEl.value.trim() : "") || "ユーザー";
       const newBio = bEl ? bEl.value.trim() : "";
+      const newEmail = eEl ? eEl.value.trim() : "";
+      const newNotifySettings = {
+        likes: nLikes ? nLikes.checked : true,
+        comments: nCmts ? nCmts.checked : true,
+        follows: nFollows ? nFollows.checked : true
+      };
       const oldUserId = currentUser.userId;
       const saveBtn = document.getElementById("saveProfileBtn");
 
@@ -2334,7 +2543,9 @@ function setupEventListeners() {
               db.from("posts").update({ user_id: newUserId }).eq("user_id", oldUserId),
               db.from("comments").update({ user_id: newUserId }).eq("user_id", oldUserId),
               db.from("messages").update({ from_user_id: newUserId }).eq("from_user_id", oldUserId),
-              db.from("messages").update({ to_user_id: newUserId }).eq("to_user_id", oldUserId)
+              db.from("messages").update({ to_user_id: newUserId }).eq("to_user_id", oldUserId),
+              db.from("notifications").update({ to_user_id: newUserId }).eq("to_user_id", oldUserId),
+              db.from("notifications").update({ from_user_id: newUserId }).eq("from_user_id", oldUserId)
             ]);
           }
 
@@ -2346,7 +2557,9 @@ function setupEventListeners() {
 
         currentUser.nickname = newNick;
         currentUser.bio = newBio;
+        currentUser.email = newEmail;
         currentUser.avatar = currentAvatarBase64;
+        currentUser.notify_settings = newNotifySettings;
         localStorage.setItem("okatari_user", JSON.stringify(currentUser));
 
         const found = allUsersData.find(u => u.user_id === newUserId || u.user_id === oldUserId);
@@ -2354,14 +2567,18 @@ function setupEventListeners() {
           found.user_id = newUserId; 
           found.nickname = newNick; 
           found.bio = newBio; 
+          found.email = newEmail;
           found.avatar = currentAvatarBase64; 
+          found.notify_settings = newNotifySettings;
         }
 
         if (db) {
           await db.from("users_custom").update({
             nickname: newNick,
             bio: newBio,
-            avatar: currentAvatarBase64
+            email: newEmail,
+            avatar: currentAvatarBase64,
+            notify_settings: newNotifySettings
           }).eq("user_id", newUserId);
         }
 
@@ -2407,48 +2624,66 @@ function setupEventListeners() {
     }
   });
 
-  // 投稿写真
+  // ★ 複数枚写真選択（最大4枚）
   const postImgIn = document.getElementById("postImageInput");
   if (postImgIn) {
     postImgIn.addEventListener("change", function(e) {
-      const file = e.target.files[0];
+      const files = Array.from(e.target.files).slice(0, 4); // 最大4枚
       const pModal = document.getElementById("postModal");
+      const prevBox = document.getElementById("imagePreviewBox");
 
       const slotSelect = document.getElementById("postTimeSlot");
-      if (slotSelect) {
-        slotSelect.value = getInitialTimeSlot();
-      }
+      if (slotSelect) slotSelect.value = getInitialTimeSlot();
 
-      if (!file) {
+      if (!files || files.length === 0) {
         if (pModal) pModal.classList.add("show");
         return;
       }
-      currentUploadedFile = file;
 
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const img = new Image();
-        img.src = evt.target.result;
-        img.onload = function() {
-          const canvas = document.createElement("canvas");
-          const MAX = 800;
-          let w = img.width, h = img.height;
-          if (w > MAX) { h *= MAX / w; w = MAX; }
-          canvas.width = w; canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-          currentUploadedBase64 = canvas.toDataURL("image/jpeg", 0.75);
-          const prev = document.getElementById("imagePreviewBox");
-          if (prev) prev.innerHTML = `<img src="${currentUploadedBase64}">`;
-          if (pModal) pModal.classList.add("show");
+      currentUploadedImagesBase64 = [];
+      if (prevBox) prevBox.innerHTML = "";
+
+      let loadedCount = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const img = new Image();
+          img.src = evt.target.result;
+          img.onload = function() {
+            const canvas = document.createElement("canvas");
+            const MAX = 800;
+            let w = img.width, h = img.height;
+            if (w > MAX) { h *= MAX / w; w = MAX; }
+            canvas.width = w; canvas.height = h;
+            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            const b64 = canvas.toDataURL("image/jpeg", 0.75);
+            currentUploadedImagesBase64.push(b64);
+
+            if (prevBox) {
+              const previewImg = document.createElement("img");
+              previewImg.src = b64;
+              previewImg.style.width = "70px";
+              previewImg.style.height = "70px";
+              previewImg.style.objectFit = "cover";
+              previewImg.style.borderRadius = "var(--radius-md)";
+              prevBox.appendChild(previewImg);
+            }
+
+            loadedCount++;
+            if (loadedCount === files.length) {
+              currentUploadedBase64 = currentUploadedImagesBase64[0];
+              if (pModal) pModal.classList.add("show");
+            }
+          };
         };
-      };
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      });
     });
   }
 
   safeOnClick("getGeoBtn", fetchBackgroundLocation);
 
-  // 投稿送信（★ 岡山限定ブロック ＆ 住所自動検索 ＆ Storage保存）
+  // 投稿送信（複数枚Storageアップロード ＆ 岡山ブロック対応）
   const postF = document.getElementById("postForm");
   if (postF) {
     postF.onsubmit = async (e) => {
@@ -2457,7 +2692,7 @@ function setupEventListeners() {
       if (btn) { btn.textContent = "画像を送信中..."; btn.disabled = true; }
 
       try {
-        let finalImageUrl = await uploadImageToStorage();
+        let finalImageUrls = await uploadMultipleImagesToStorage(currentUploadedImagesBase64);
 
         if (btn) btn.textContent = "位置情報を確認中...";
 
@@ -2481,7 +2716,6 @@ function setupEventListeners() {
           }
         }
 
-        // 岡山県外からの投稿をブロック
         if (!isInsideOkayama(postLat, postLng, inputAddress)) {
           alert("【投稿制限】\nオカトリは岡山県特化型の旅行SNSです。\n岡山県内のスポット・位置情報のみ投稿できます。");
           if (btn) { btn.textContent = "投稿を公開"; btn.disabled = false; }
@@ -2505,13 +2739,13 @@ function setupEventListeners() {
           time_slot: slotIn ? slotIn.value : "all",
           date: new Date().toLocaleDateString("ja-JP"),
           likes: [],
-          image_url: finalImageUrl
+          image_url: finalImageUrls[0] || "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80",
+          images: finalImageUrls
         };
 
         if (db) {
           const { error: insertError } = await db.from("posts").insert([newPost]);
           if (insertError) {
-            console.error("投稿保存エラー:", insertError);
             alert("投稿エラー: " + insertError.message);
             if (btn) { btn.textContent = "投稿を公開"; btn.disabled = false; }
             return;
@@ -2525,18 +2759,15 @@ function setupEventListeners() {
         updateMapMarkers();
 
         postF.reset();
-        const pBox = document.getElementById("imagePreviewBox");
-        if (pBox) pBox.innerHTML = "";
+        document.getElementById("imagePreviewBox").innerHTML = "";
         currentUploadedBase64 = "";
-        currentUploadedFile = null;
+        currentUploadedImagesBase64 = [];
 
         if (btn) { btn.textContent = "投稿を公開"; btn.disabled = false; }
-        const pModal = document.getElementById("postModal");
-        if (pModal) pModal.classList.remove("show");
+        document.getElementById("postModal").classList.remove("show");
 
         alert("スポットの投稿が完了しました！");
       } catch (err) {
-        console.error("投稿処理エラー:", err);
         alert("予期せぬエラーが発生しました: " + err.message);
         if (btn) { btn.textContent = "投稿を公開"; btn.disabled = false; }
       }
@@ -2559,8 +2790,7 @@ function setupEventListeners() {
       }
     } else {
       closeMobileDrawer();
-      const aModal = document.getElementById("authModal");
-      if (aModal) aModal.classList.add("show");
+      document.getElementById("authModal").classList.add("show");
     }
   };
 
@@ -2571,38 +2801,45 @@ function setupEventListeners() {
   let isRegister = false;
   safeOnClick("tabSwitchLogin", () => {
     isRegister = false;
-    const t1 = document.getElementById("tabSwitchLogin");
-    const t2 = document.getElementById("tabSwitchRegister");
-    const nickG = document.getElementById("nicknameGroup");
-    const btn = document.getElementById("authSubmitBtn");
-    if (t1) t1.classList.add("active");
-    if (t2) t2.classList.remove("active");
-    if (nickG) nickG.style.display = "none";
-    if (btn) btn.textContent = "ログイン";
+    document.getElementById("tabSwitchLogin").classList.add("active");
+    document.getElementById("tabSwitchRegister").classList.remove("active");
+    document.getElementById("nicknameGroup").style.display = "none";
+    document.getElementById("authSubmitBtn").textContent = "ログイン";
   });
 
   safeOnClick("tabSwitchRegister", () => {
     isRegister = true;
-    const t1 = document.getElementById("tabSwitchRegister");
-    const t2 = document.getElementById("tabSwitchLogin");
-    const nickG = document.getElementById("nicknameGroup");
-    const btn = document.getElementById("authSubmitBtn");
-    if (t1) t1.classList.add("active");
-    if (t2) t2.classList.remove("active");
-    if (nickG) nickG.style.display = "block";
-    if (btn) btn.textContent = "アカウント作成";
+    document.getElementById("tabSwitchRegister").classList.add("active");
+    document.getElementById("tabSwitchLogin").classList.remove("active");
+    document.getElementById("nicknameGroup").style.display = "block";
+    document.getElementById("authSubmitBtn").textContent = "アカウント作成";
+  });
+
+  // パスワード忘れ・確認
+  safeOnClick("forgotPasswordBtn", async (e) => {
+    e.preventDefault();
+    const inputEmail = prompt("登録済みのメールアドレスを入力してください:");
+    if (!inputEmail || inputEmail.trim() === "") return;
+
+    if (db) {
+      const { data } = await db.from("users_custom").select("user_id, nickname, password").eq("email", inputEmail.trim()).maybeSingle();
+      if (data) {
+        alert(`【アカウント情報が見つかりました】\nユーザーID: @${data.user_id}\nパスワード: ${data.password}\n\n※この情報を控えてログインしてください。`);
+      } else {
+        alert("このメールアドレスに一致するアカウントは見つかりませんでした。\n設定画面からメールアドレスを登録しているかご確認ください。");
+      }
+    } else {
+      alert("データベースに接続されていません。");
+    }
   });
 
   const authF = document.getElementById("authForm");
   if (authF) {
     authF.onsubmit = async (e) => {
       e.preventDefault();
-      const uIn = document.getElementById("authUsername");
-      const pIn = document.getElementById("authPassword");
-      const nIn = document.getElementById("authNickname");
-      const inputId = (uIn ? uIn.value.trim() : "");
-      const password = (pIn ? pIn.value.trim() : "");
-      const nickname = (nIn && nIn.value.trim()) ? nIn.value.trim() : inputId;
+      const inputId = document.getElementById("authUsername").value.trim();
+      const password = document.getElementById("authPassword").value.trim();
+      const nickname = document.getElementById("authNickname").value.trim() || inputId;
 
       if (isRegister) {
         const newU = {
@@ -2611,6 +2848,7 @@ function setupEventListeners() {
           password: password,
           nickname: nickname,
           bio: "岡山の旅を共有しています",
+          email: "",
           avatar: "",
           is_admin: false,
           following: [],
@@ -2618,7 +2856,10 @@ function setupEventListeners() {
           bookmarks: [],
           achievements: [],
           featured_badges: [],
-          stamps: []
+          stamps: [],
+          blocked_users: [],
+          muted_users: [],
+          notify_settings: { likes: true, comments: true, follows: true }
         };
 
         if (db) {
@@ -2640,6 +2881,7 @@ function setupEventListeners() {
           username: inputId,
           nickname: nickname,
           bio: newU.bio,
+          email: "",
           avatar: "",
           is_admin: false,
           following: [],
@@ -2647,7 +2889,10 @@ function setupEventListeners() {
           bookmarks: [],
           achievements: [],
           featured_badges: [],
-          stamps: []
+          stamps: [],
+          blocked_users: [],
+          muted_users: [],
+          notify_settings: newU.notify_settings
         };
         allUsersData.push(newU);
       } else {
@@ -2659,6 +2904,7 @@ function setupEventListeners() {
               username: data.user_id,
               nickname: data.nickname,
               bio: data.bio,
+              email: data.email || "",
               avatar: data.avatar || "",
               is_admin: data.is_admin || false,
               following: parseArray(data.following),
@@ -2666,7 +2912,10 @@ function setupEventListeners() {
               bookmarks: parseArray(data.bookmarks),
               achievements: parseArray(data.achievements),
               featured_badges: parseArray(data.featured_badges || "[]"),
-              stamps: parseArray(data.stamps || "[]")
+              stamps: parseArray(data.stamps || "[]"),
+              blocked_users: parseArray(data.blocked_users || "[]"),
+              muted_users: parseArray(data.muted_users || "[]"),
+              notify_settings: data.notify_settings || { likes: true, comments: true, follows: true }
             };
           } else {
             alert("ユーザーIDまたはパスワードが正しくありません。");
@@ -2684,17 +2933,15 @@ function setupEventListeners() {
       renderMyAchievements();
       renderPokedex();
       renderStampRallies();
-      const aModal = document.getElementById("authModal");
-      if (aModal) aModal.classList.remove("show");
+      fetchNotifications();
+      document.getElementById("authModal").classList.remove("show");
     };
   }
 
   // エリアマップ検索
   const mapSearchInput = document.getElementById("mapSearchInput");
   if (mapSearchInput) {
-    mapSearchInput.addEventListener("input", (e) => {
-      updateMapMarkers(e.target.value);
-    });
+    mapSearchInput.addEventListener("input", (e) => updateMapMarkers(e.target.value));
   }
 
   setupAiRouteFeature();

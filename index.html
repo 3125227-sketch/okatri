@@ -35,6 +35,10 @@
 
     <nav class="sidebar-nav">
       <div class="sidebar-item active" data-tab="tabPosts"><i class="fa-solid fa-layer-group s-icon"></i> タイムライン</div>
+           <div class="sidebar-item" id="openNotifyModalBtn">
+        <i class="fa-regular fa-bell s-icon"></i> 通知 
+        <span class="notify-badge-count" id="sidebarNotifyCount" style="position:static; margin-left:6px; display:none;">0</span>
+      </div>
       <div class="sidebar-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot s-icon"></i> エリアマップ</div>
       <div class="sidebar-item" data-tab="tabRoutes"><i class="fa-solid fa-route s-icon"></i> ルート作成</div>
       <div class="sidebar-item" data-tab="tabNewsPage"><i class="fa-regular fa-bell s-icon"></i> お知らせ</div>
@@ -91,7 +95,13 @@
     <header class="mobile-header">
       <button class="hamburger-btn" id="openDrawerBtn" title="メニュー"><i class="fa-solid fa-bars"></i></button>
       <div class="header-title-centered" id="pageTitle">OKATRI</div>
-      <button class="header-btn" id="mobileAuthBtn">ログイン</button>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="notify-bell-wrap" id="mobileNotifyBellBtn" title="通知">
+          <i class="fa-regular fa-bell" style="font-size:18px; color:var(--text-primary);"></i>
+          <span class="notify-badge-count" id="mobileNotifyCount">0</span>
+        </div>
+        <button class="header-btn" id="mobileAuthBtn">ログイン</button>
+      </div>
     </header>
 
     <main class="app-main">
@@ -396,6 +406,29 @@
               <label>自己紹介</label>
               <textarea id="settingsBio" rows="3" placeholder="自己紹介文を入力"></textarea>
             </div>
+            <!-- ★ 追加: メールアドレス連携（ID/パスワード再確認用） -->
+            <div class="form-group">
+              <label>メールアドレス (パスワード忘れ用・任意)</label>
+              <input type="email" id="settingsEmail" placeholder="example@gmail.com">
+              <small style="color:var(--text-muted); font-size:11px;">※登録しておくと、パスワードを忘れた際に確認できます</small>
+            </div>
+
+            <!-- ★ 追加: 通知オンオフ設定 -->
+            <div class="form-group" style="margin-top:16px;">
+              <label style="font-weight:700;">通知設定</label>
+              <div class="switch-row">
+                <span>いいねされた時の通知</span>
+                <input type="checkbox" id="notifySettingLikes" class="switch-input" checked>
+              </div>
+              <div class="switch-row">
+                <span>コメントされた時の通知</span>
+                <input type="checkbox" id="notifySettingComments" class="switch-input" checked>
+              </div>
+              <div class="switch-row">
+                <span>フォローされた時の通知</span>
+                <input type="checkbox" id="notifySettingFollows" class="switch-input" checked>
+              </div>
+            </div>
             <button type="submit" class="btn-primary" id="saveProfileBtn">変更を保存</button>
           </form>
         </div>
@@ -516,9 +549,9 @@
     </div>
     <form id="postForm">
       <div class="form-group">
-        <label>写真</label>
-        <input type="file" id="postImageInput" accept="image/*" capture="environment">
-        <div id="imagePreviewBox" class="img-preview-box"></div>
+        <label>写真 (最大4枚まで選択可能)</label>
+        <input type="file" id="postImageInput" accept="image/*" multiple>
+        <div id="imagePreviewBox" style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;"></div>
       </div>
 
       <div class="form-group">
@@ -615,6 +648,8 @@
     <div style="display:flex; gap:8px; margin-bottom:12px;">
       <button id="upModalFollowBtn" class="btn-primary" style="flex:1;"><i class="fa-solid fa-user-plus"></i> フォロー</button>
       <button id="upModalDmBtn" class="btn-secondary" style="flex:1;"><i class="fa-regular fa-paper-plane"></i> メッセージ</button>
+      <!-- ★ 追加: ブロック/ミュートボタン -->
+      <button id="upModalBlockBtn" class="btn-report" style="padding:6px 10px;" title="ブロック/ミュート"><i class="fa-solid fa-ban"></i></button>
     </div>
     <h3 class="sub-heading">投稿一覧</h3>
     <div class="spot-grid" id="upModalPostsGrid"></div>
@@ -644,9 +679,13 @@
       <div class="form-group">
         <label>パスワード</label>
         <input type="password" id="authPassword" required placeholder="パスワード">
+        <div style="text-align:right; margin-top:4px;">
+          <a href="#" id="forgotPasswordBtn" style="font-size:11px; color:var(--primary-accent); text-decoration:none;">ID・パスワードを忘れた方はこちら</a>
+        </div>
       </div>
-      <div class="auth-submit-row">
-        <button type="submit" class="btn-primary" id="authSubmitBtn">ログイン</button>
+      <!-- ★ ここに追加: ログイン/登録の送信ボタン -->
+      <div class="auth-submit-row" style="margin-top:16px;">
+        <button type="submit" class="btn-primary" id="authSubmitBtn" style="width:100%;">ログイン</button>
       </div>
     </form>
   </div>
@@ -782,6 +821,18 @@
         <button type="submit" class="btn-primary" id="saveEditPostBtn">変更を保存</button>
       </div>
     </form>
+  </div>
+</div>
+  <!-- 通知一覧モーダル -->
+<div class="modal-backdrop" id="notifyModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>お知らせ・通知</h2>
+      <button class="close-btn" id="closeNotifyModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="notifyListContainer" style="max-height:60vh; overflow-y:auto;">
+      <div class="empty-state">新しい通知はありません</div>
+    </div>
   </div>
 </div>
 
