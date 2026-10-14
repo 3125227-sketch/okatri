@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OKATRI - 岡山旅行・地域体験プラットフォーム</title>
+  <!-- Google Fonts & Font Awesome 6 (線画アイコン) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="https://dkbcnzrniknrvnflnytc.supabase.co/storage/v1/object/public/post_images/Screenshot%202026-10-03%2000.05.35.png">
+  <link rel="apple-touch-icon" href="https://dkbcnzrniknrvnflnytc.supabase.co/storage/v1/object/public/post_images/Screenshot%202026-10-03%2000.05.35.png">
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="app-container">
+  
+  <!-- ==========================================
+       【PC用】左サイドバー
+  =========================================== -->
+  <aside class="desktop-sidebar">
+    <div class="sidebar-brand">
+  <img src="https://dkbcnzrniknrvnflnytc.supabase.co/storage/v1/object/public/post_images/Screenshot%202026-10-03%2000.05.35.png" alt="OKATRI" class="brand-logo-mark">
+  <div class="brand-text-wrap">
+    <span class="brand-title">OKATRI</span>
+    <span class="brand-sub">Okayama Travel SNS</span>
+  </div>
+</div>
+
+    <button class="btn-primary sidebar-post-btn" id="sidebarPostBtn"><i class="fa-solid fa-plus"></i> スポットを投稿</button>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-item active" data-tab="tabPosts"><i class="fa-solid fa-layer-group s-icon"></i> タイムライン</div>
+      <div class="sidebar-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot s-icon"></i> エリアマップ</div>
+      <div class="sidebar-item" data-tab="tabRoutes"><i class="fa-solid fa-route s-icon"></i> ルート作成</div>
+      <div class="sidebar-item" data-tab="tabNewsPage"><i class="fa-regular fa-bell s-icon"></i> お知らせ</div>
+      <!-- サイドバー & ドロワーの nav に追加 -->
+<div class="sidebar-item" data-tab="tabAchievements"><i class="fa-solid fa-award s-icon"></i> アチーブメント図鑑</div>
+      <div class="sidebar-item" data-tab="tabAccounts"><i class="fa-solid fa-magnifying-glass s-icon"></i> ユーザー検索</div>
+      <div class="sidebar-item" data-tab="tabAbout"><i class="fa-regular fa-circle-question s-icon"></i> オカトリについて</div>
+      <div class="sidebar-item" data-tab="tabProfile"><i class="fa-regular fa-user s-icon"></i> マイページ</div>
+    </nav>
+
+    <div class="sidebar-user-card">
+      <div class="user-avatar" id="sidebarAvatarIcon"><i class="fa-solid fa-user"></i></div>
+      <div class="user-meta">
+        <div class="user-name" id="sidebarUserName">ゲスト</div>
+        <button class="auth-link-btn" id="sidebarAuthBtn">ログイン / 新規登録</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==========================================
+       【スマホ用】スライド式 横メニュー（ドロワー）
+  =========================================== -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <aside class="mobile-drawer" id="mobileDrawer">
+    <div class="drawer-header">
+      <span class="brand-title" style="font-size:16px;">MENU</span>
+      <button class="close-btn" id="closeDrawerBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <nav class="drawer-nav">
+      <div class="drawer-item" data-tab="tabPosts"><i class="fa-solid fa-layer-group d-icon"></i> ホーム</div>
+      <div class="drawer-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot d-icon"></i> エリアマップ</div>
+      <div class="drawer-item" data-tab="tabRoutes"><i class="fa-solid fa-route d-icon"></i> ルート作成</div>
+      <div class="drawer-item" data-tab="tabNewsPage"><i class="fa-regular fa-bell d-icon"></i> お知らせ</div>
+      <!-- mobileDrawer の drawer-nav に追加 -->
+<div class="drawer-item" data-tab="tabAchievements"><i class="fa-solid fa-award d-icon"></i> アチーブメント図鑑</div>
+      <div class="drawer-item" data-tab="tabAccounts"><i class="fa-solid fa-magnifying-glass d-icon"></i> ユーザー検索</div>
+      <div class="drawer-item" data-tab="tabAbout"><i class="fa-regular fa-circle-question d-icon"></i> オカトリについて</div>
+      <div class="drawer-item" data-tab="tabProfile"><i class="fa-regular fa-user d-icon"></i> マイページ</div>
+      <div class="drawer-item" data-tab="tabSettings" id="drawerSettingsLink" style="display:none;"><i class="fa-solid fa-gear d-icon"></i> アカウント設定</div>
+    </nav>
+
+    <div class="drawer-footer">
+      <button class="drawer-auth-btn" id="drawerAuthBtn"><i class="fa-solid fa-arrow-right-to-bracket"></i> ログイン / 新規登録</button>
+    </div>
+  </aside>
+
+  <!-- ==========================================
+       メインコンテンツエリア
+  =========================================== -->
+  <div class="main-wrapper">
+    
+    <!-- 【スマホ用】上部ヘッダー（完全中央揃え） -->
+    <header class="mobile-header">
+      <button class="hamburger-btn" id="openDrawerBtn" title="メニュー"><i class="fa-solid fa-bars"></i></button>
+      <div class="header-title-centered" id="pageTitle">OKATRI</div>
+      <button class="header-btn" id="mobileAuthBtn">ログイン</button>
+    </header>
+
+    <main class="app-main">
+      
+      <!-- 1. 投稿一覧タブ -->
+      <section id="tabPosts" class="tab-pane active">
+        <!-- ソリッド＆クリーンなヒーローバナー -->
+        <div class="hero-section">
+          <div class="hero-tag">OKAYAMA "PLUS TRIP"</div>
+          <h1 class="welcome-text">もっと気軽に、もっと楽しく、もっと岡山へ。</h1>
+          <p class="hero-sub">地元のリアルな声を届けるオープンコミュニティ</p>
+          <button class="btn-primary mobile-top-post-btn" id="topPostBtn"><i class="fa-solid fa-camera"></i> 写真を撮って投稿</button>
+        </div>
+
+        <!-- お知らせバナーカード -->
+        <div class="news-section">
+          <div class="news-header">
+            <span class="news-title"><i class="fa-regular fa-bell"></i> 最新のお知らせ</span>
+            <button class="news-more-btn" id="goNewsPageBtn">一覧へ <i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+          <div class="news-list" id="announcementListHome">
+            <div class="empty-state">お知らせを取得中...</div>
+          </div>
+        </div>
+
+        <!-- ★ 追加: 昼版（3:00-17:59）/ 夜版（18:00-2:59）切り替えバー -->
+
+<div class="time-mode-banner">
+  <div style="font-size:12px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+    <span id="timeModeIcon"><i class="fa-solid fa-sun" style="color:#d97706;"></i></span>
+    <span id="timeModeStatusLabel">朝・昼版 (3:00〜17:59)</span>
+  </div>
+  <div class="time-mode-tabs">
+    <button class="time-mode-btn day-btn active" id="setTimeDayBtn"><i class="fa-solid fa-sun"></i> 昼モード</button>
+    <button class="time-mode-btn night-btn" id="setTimeNightBtn"><i class="fa-solid fa-moon"></i> 夜モード</button>
+  </div>
+</div>
+        <!-- コントロールバー（ソート＆検索） -->
+        <div class="feed-control-row">
+          <div class="sort-tabs">
+            <button class="sort-tab active" id="sortNewestBtn"><i class="fa-regular fa-clock"></i> 最新順</button>
+            <button class="sort-tab" id="sortPopularBtn"><i class="fa-solid fa-arrow-trend-up"></i> 人気順</button>
+          </div>
+
+          <div class="search-box">
+            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="text" id="searchInput" placeholder="スポット名・エリア・#タグで検索">
+          </div>
+        </div>
+
+        <!-- 投稿グリッド（PC・スマホ両対応） -->
+        <div class="spot-grid" id="spotGrid">
+          <div class="empty-state">投稿データを読み込み中...</div>
+        </div>
+      </section>
+
+      <!-- 2. エリア・岡山マップタブ -->
+      <section id="tabArea" class="tab-pane">
+        <div class="section-title-box">
+          <div class="section-title-row">
+            <div>
+              <h2 class="section-heading">エリアマップ</h2>
+              <p class="section-desc">岡山県内の登録スポットおよびピックアップ情報</p>
+            </div>
+            <button class="btn-secondary" id="showCurrentPosOnMapBtn">
+              <i class="fa-solid fa-crosshairs"></i> 現在地
+            </button>
+          </div>
+        </div>
+
+        <!-- ★ここに追加：ハッシュタグ検索バー -->
+        <div class="map-search-row">
+          <div class="search-box">
+            <span class="search-icon"><i class="fa-solid fa-hashtag"></i></span>
+            <input type="text" id="mapSearchInput" placeholder="#倉敷 #絶景 #カフェ などのタグやスポット名でピンを絞り込み">
+          </div>
+        </div>
+
+        <div class="area-two-col">
+          <div class="area-map-col">
+            <div id="okayamaMap" class="map-container"></div>
+          </div>
+          <div class="area-pickup-col">
+            <h3 class="sub-heading">ピックアップ</h3>
+            <div class="pickup-list" id="pickupList">
+              <div class="empty-state">ピックアップ読込中...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. ルート作成 ＆ 最短プランタブ -->
+      <section id="tabRoutes" class="tab-pane">
+        <div class="section-title-box">
+          <h2 class="section-heading">ルート・ツアープラン作成</h2>
+          <p class="section-desc">地点を選んで巡回ルートを生成、または道なりモデルコースを自動作成</p>
+        </div>
+        
+        <div class="route-mode-tabs">
+          <button class="mode-tab active" id="modeCustomBtn">自由選択ルート</button>
+          <button class="mode-tab" id="modeAiBtn">道なり最適化プラン</button>
+        </div>
+
+        <div class="route-two-col">
+          <div class="route-form-col">
+            <div id="customRouteBox" class="clean-card-box">
+              <div class="route-select-group">
+                <label>出発地</label>
+                <select id="routeStartSelect">
+                  <option value="CURRENT_GEO">現在地 (GPS)</option>
+                  <option value="岡山駅" selected>岡山駅</option>
+                  <option value="倉敷駅">倉敷駅</option>
+                  <option value="津山駅">津山駅</option>
+                  <option value="児島駅">児島駅</option>
+                </select>
+              </div>
+
+              <div class="route-select-group">
+                <label>立ち寄りスポットを選択</label>
+                <div class="spot-filter-chips">
+                  <button class="chip active" data-filter="all">すべて</button>
+                  <button class="chip" data-filter="liked">いいね済</button>
+                  <button class="chip" data-filter="bookmarked">保存済</button>
+                </div>
+                <input type="text" id="routeSpotSearch" class="small-search" placeholder="スポット名で絞り込み...">
+                <div id="routeSpotCheckboxes" class="checkbox-container"></div>
+              </div>
+
+              <button class="btn-primary" id="generateRouteBtn"><i class="fa-solid fa-route"></i> ルートを生成する</button>
+            </div>
+
+            <div id="aiRouteBox" class="clean-card-box" style="display:none;">
+              <div class="route-select-group">
+                <label>出発地（スタート）</label>
+                <input type="text" id="aiStartInput" placeholder="例: 岡山駅 / 児島駅" value="岡山駅">
+              </div>
+              <div class="route-select-group">
+                <label>目的地（ゴール）</label>
+                <input type="text" id="aiGoalInput" placeholder="例: 倉敷美観地区 / 鷲羽山展望台" value="倉敷美観地区">
+              </div>
+              <div class="route-select-group">
+                <label>テーマ・ジャンル</label>
+                <select id="aiThemeSelect">
+                  <option value="王道の岡山絶景＆名所めぐり">王道の岡山絶景・名所めぐり</option>
+                  <option value="岡山名物グルメと話題のカフェ巡り">岡山グルメ・カフェ巡り</option>
+                  <option value="歴史とレトロな街並み・文化体験">歴史・街並み・文化体験</option>
+                  <option value="自然・温泉・のんびり癒やしの旅">自然・温泉・リフレッシュ</option>
+                </select>
+              </div>
+              <button class="btn-primary" id="generateAiRouteBtn"><i class="fa-solid fa-compass"></i> 道なりプランを生成する</button>
+            </div>
+          </div>
+
+          <div class="route-result-col">
+            <div id="routeResultArea" class="clean-card-box" style="display:none;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
+                <h3 class="sub-heading" id="routeResultTitle" style="margin:0;">生成されたルート</h3>
+                <span id="aiBadgeStatus" class="tech-badge">Optimized</span>
+              </div>
+              <ul id="routeTimeline" class="timeline"></ul>
+              <a id="googleMapsLink" href="#" target="_blank" class="btn-google-nav"><i class="fa-solid fa-arrow-up-right-from-square"></i> Googleマップでナビ開始</a>
+              
+              <!-- ★ 追加: ルートシェアボタングループ -->
+              <div style="display:flex; gap:8px; margin-top:10px;">
+                <button type="button" class="btn-share-x" id="shareRouteXBtn"><i class="fa-brands fa-x-twitter"></i> Xでシェア</button>
+                <button type="button" class="btn-share-line" id="shareRouteLineBtn"><i class="fa-brands fa-line"></i> LINE</button>
+                <button type="button" class="btn-share-copy" id="shareRouteCopyBtn"><i class="fa-regular fa-copy"></i> コピー</button>
+              </div>
+            </div>
+            <div id="routePlaceholder" class="clean-card-box route-placeholder-card">
+              <div style="font-size:28px; margin-bottom:8px; color:#94a3b8;"><i class="fa-regular fa-map"></i></div>
+              <div style="font-weight:600; font-size:14px; color:#334155;">ルートがここに表示されます</div>
+              <div style="font-size:12px; color:#64748b; margin-top:4px;">条件を設定して生成ボタンを押してください</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. お知らせ一覧専用タブ -->
+      <section id="tabNewsPage" class="tab-pane">
+        <div class="section-title-box">
+          <h2 class="section-heading">お知らせ一覧</h2>
+          <p class="section-desc">プラットフォームの最新情報・機能追加のお知らせ</p>
+        </div>
+        <div class="news-page-container" id="announcementListFull">
+          <div class="empty-state">お知らせを取得中...</div>
+        </div>
+      </section>
+
+      <!-- 5. アカウント検索タブ -->
+      <section id="tabAccounts" class="tab-pane">
+        <div class="section-title-box">
+          <h2 class="section-heading">ユーザー検索</h2>
+          <p class="section-desc">ユーザーIDまたはニックネームで探す</p>
+        </div>
+        <div class="search-box" style="margin-bottom:16px;">
+          <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+          <input type="text" id="userSearchInput" placeholder="ユーザーID・ニックネームで検索">
+        </div>
+        <div class="user-search-grid" id="userSearchResultGrid">
+          <div class="empty-state">ユーザーを読み込み中...</div>
+        </div>
+      </section>
+
+      <!-- 6. オカトリについて -->
+      <section id="tabAbout" class="tab-pane">
+        <div class="about-page-card" id="aboutPageDynamicContent">
+          <div class="empty-state">読み込み中...</div>
+        </div>
+      </section>
+
+      <!-- 7. マイページタブ -->
+      <section id="tabProfile" class="tab-pane">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 class="section-heading" style="margin:0;">マイページ</h2>
+          <button class="btn-secondary" id="goToSettingsBtn" style="display:none;"><i class="fa-solid fa-gear"></i> 設定</button>
+        </div>
+        
+        <div class="profile-card">
+          <div class="profile-avatar-box" id="myAvatarBox"><i class="fa-solid fa-user"></i></div>
+          <div class="profile-info">
+            <h3 id="profileNickname">未ログイン</h3>
+            <p id="profileBio">ログインするとすべての機能が利用できます</p>
+
+            <!-- セット中バッジ（最大3個） -->
+            <div style="font-size:11px; font-weight:600; color:var(--text-secondary); margin-top:8px; margin-bottom:4px;">セット中バッジ (最大3個)</div>
+            <div class="featured-badges-row" id="myFeaturedBadges">
+              <div class="featured-badge-slot" title="枠1"><i class="fa-solid fa-plus"></i></div>
+              <div class="featured-badge-slot" title="枠2"><i class="fa-solid fa-plus"></i></div>
+              <div class="featured-badge-slot" title="枠3"><i class="fa-solid fa-plus"></i></div>
+            </div>
+
+            <div class="follow-counts">
+              <button class="follow-pill-btn" id="openFollowingBtn"><b>0</b> フォロー中</button>
+              <button class="follow-pill-btn" id="openFollowersBtn"><b>0</b> フォロワー</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 投稿一覧 / ブックマーク切り替えタブ -->
+        <div class="profile-tab-switch">
+          <button class="p-tab-btn active" id="pTabMyPostsBtn"><i class="fa-regular fa-image"></i> 投稿 (<span id="myPostsCount">0</span>)</button>
+          <button class="p-tab-btn" id="pTabBookmarksBtn"><i class="fa-regular fa-bookmark"></i> 保存済み (<span id="myBookmarksCount">0</span>)</button>
+        </div>
+
+        <div class="spot-grid" id="myProfileSpotsGrid">
+          <div class="empty-state">投稿はありません</div>
+        </div>
+      </section>
+
+      <!-- 8. DM専用ページ -->
+      <section id="tabDm" class="tab-pane">
+        <div class="dm-page-wrapper">
+          <div class="dm-page-header">
+            <button class="btn-secondary" id="backFromDmBtn" style="padding:6px 12px; font-size:12px;"><i class="fa-solid fa-arrow-left"></i> 戻る</button>
+            <h3 id="dmPageTitle" style="margin:0; font-size:14px; font-weight:600;">メッセージ</h3>
+            <div style="width:50px;"></div>
+          </div>
+          <div class="dm-messages" id="dmPageMessageList"></div>
+          <div class="dm-input-row">
+            <input type="text" id="dmPageInput" placeholder="メッセージを入力...">
+            <button id="sendDmPageBtn" class="btn-primary" style="width:auto; padding:8px 18px;">送信</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. 設定専用ページ -->
+      <section id="tabSettings" class="tab-pane">
+        <div class="clean-card-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
+            <h2 class="section-heading" style="margin:0; font-size:16px;">プロフィール設定</h2>
+            <button class="btn-secondary" id="backFromSettingsBtn" style="padding:6px 12px; font-size:12px;"><i class="fa-solid fa-arrow-left"></i> 戻る</button>
+          </div>
+          
+         <form id="profileSettingsForm">
+            <div class="form-group" style="text-align:center;">
+              <label>アイコン画像</label>
+              <div id="settingsAvatarPreview" class="avatar-preview-circle"><i class="fa-solid fa-user"></i></div>
+              <input type="file" id="settingsAvatarInput" accept="image/*" style="margin-top:8px;">
+              
+              <!-- ★ 追加: アイコン位置・ズーム調整スライダー -->
+              <div class="avatar-crop-controls" id="avatarAdjustControls" style="display:none;">
+                <label>上下の位置調整</label>
+                <input type="range" id="avatarPosY" min="0" max="100" value="50">
+                <label>拡大・ズーム</label>
+                <input type="range" id="avatarZoom" min="1" max="2" step="0.1" value="1">
+              </div>
+            </div>
+
+            <!-- ★ 追加: ユーザーID変更欄 -->
+            <div class="form-group">
+              <label>ユーザーID (半角英数字・アンダーバー)</label>
+              <input type="text" id="settingsUserId" required placeholder="例: okayama_user">
+            </div>
+
+            <div class="form-group">
+              <label>ニックネーム</label>
+              <input type="text" id="settingsNickname" required placeholder="表示名">
+            </div>
+           
+            <div class="form-group">
+              <label>自己紹介</label>
+              <textarea id="settingsBio" rows="3" placeholder="自己紹介文を入力"></textarea>
+            </div>
+            <button type="submit" class="btn-primary" id="saveProfileBtn">変更を保存</button>
+          </form>
+        </div>
+      </section>
+      
+      <!-- アチーブメント図鑑 ＆ スタンプラリータブ -->
+      <section id="tabAchievements" class="tab-pane">
+        <div class="section-title-box">
+          <div class="section-title-row">
+            <div>
+              <h2 class="section-heading">アチーブメント図鑑 ＆ スタンプラリー</h2>
+              <p class="section-desc">岡山をめぐってバッジを集め、マイページにセットしよう</p>
+            </div>
+            <button class="btn-secondary" id="claimCodeBtnNav" style="font-size:12px;"><i class="fa-solid fa-key"></i> コード入力</button>
+          </div>
+        </div>
+
+        <!-- 進行度バー -->
+        <div class="clean-card-box" style="margin-bottom: 16px; padding: 14px 18px;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:6px;">
+            <span>図鑑コンプリート率</span>
+            <span id="pokedexProgressText">0 / 0 (0%)</span>
+          </div>
+          <div style="width:100%; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden;">
+            <div id="pokedexProgressBar" style="width:0%; height:100%; background:var(--primary-accent); transition: width 0.3s;"></div>
+          </div>
+        </div>
+        <!-- ★ 公式限定作成ボタン（バッジ作成 / ラリー作成） -->
+        <div id="adminCreateRallyArea" style="display:none; margin-bottom: 16px;">
+          <div style="display:flex; gap:8px;">
+            <button class="btn-primary" id="openCreateBadgeModalBtn" style="flex:1; background:#0f172a; border-color:#0f172a; font-size:12px;">
+              <i class="fa-solid fa-award"></i> 【公式限定】バッジを作成
+            </button>
+            <button class="btn-primary" id="openCreateRallyModalBtn" style="flex:1; background:#0f172a; border-color:#0f172a; font-size:12px;">
+              <i class="fa-solid fa-flag"></i> 【公式限定】ラリーを作成
+            </button>
+          </div>
+        </div>
+
+        <!-- 開催中スタンプラリー -->
+        <h3 class="sub-heading" style="margin-top:0;"><i class="fa-solid fa-location-dot" style="color:var(--primary-accent);"></i> スタンプラリー</h3>
+        <div id="stampRallyContainer"></div>
+
+        <!-- バッジ図鑑一覧 -->
+        <h3 class="sub-heading"><i class="fa-solid fa-book-open" style="color:var(--primary-accent);"></i> バッジ図鑑</h3>
+        <div class="pokedex-grid" id="pokedexGrid"></div>
+      </section>
+
+    </main>
+
+    <!-- 【スマホ用】ボトムナビ -->
+    <nav class="mobile-bottom-nav">
+      <div class="nav-item active" data-tab="tabPosts"><div class="nav-icon"><i class="fa-solid fa-layer-group"></i></div><div class="nav-label">ホーム</div></div>
+      <div class="nav-item" data-tab="tabArea"><div class="nav-icon"><i class="fa-solid fa-map-location-dot"></i></div><div class="nav-label">マップ</div></div>
+      <div class="nav-center-wrap"><button class="center-post-btn" id="mobileCenterPostBtn" title="投稿"><i class="fa-solid fa-plus"></i></button></div>
+      <div class="nav-item" data-tab="tabAccounts"><div class="nav-icon"><i class="fa-solid fa-magnifying-glass"></i></div><div class="nav-label">検索</div></div>
+      <div class="nav-item" data-tab="tabProfile"><div class="nav-icon"><i class="fa-regular fa-user"></i></div><div class="nav-label">マイページ</div></div>
+    </nav>
+
+  </div>
+</div>
+
+<!-- ==========================================
+     モーダル群
+=========================================== -->
+<!-- お知らせ詳細モーダル -->
+<div class="modal-backdrop" id="newsDetailModal">
+  <div class="modal-sheet detail-sheet">
+    <div class="detail-top-nav">
+      <span class="detail-nav-title">お知らせ詳細</span>
+      <button class="close-btn" id="closeNewsDetailModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="detail-content" id="newsDetailContent"></div>
+  </div>
+</div>
+
+<!-- アチーブメント獲得モーダル -->
+<div class="modal-backdrop" id="claimAchievementModal">
+  <div class="modal-sheet claim-modal-sheet">
+    <div class="modal-header">
+      <h2>アチーブメントの獲得</h2>
+      <button class="close-btn" id="closeClaimAchievementModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="claimAchievementForm">
+      <div class="form-group">
+        <label>イベントコード</label>
+        <input type="text" id="achievementCodeInput" required placeholder="例: OKATRI2026 / SETOSHIMA">
+      </div>
+      <p style="font-size:12px; color:#64748b; margin-bottom:12px;">指定のイベントコードを入力するとバッジが付与されます。</p>
+      <div class="claim-modal-actions">
+        <button type="submit" class="btn-primary" id="claimAchievementSubmitBtn">バッジを受け取る</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- フォロー/フォロワー一覧モーダル -->
+<div class="modal-backdrop" id="userListModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="userListModalTitle">ユーザー一覧</h2>
+      <button class="close-btn" id="closeUserListModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-search-box">
+      <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input type="text" id="userListSearchInput" placeholder="名前またはIDで検索...">
+    </div>
+    <div class="user-list-container" id="userListContainer"></div>
+  </div>
+</div>
+
+<!-- 新規投稿モーダル -->
+<div class="modal-backdrop" id="postModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>スポットを投稿</h2>
+      <button class="close-btn" id="closePostModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="postForm">
+      <div class="form-group">
+        <label>写真</label>
+        <input type="file" id="postImageInput" accept="image/*" capture="environment">
+        <div id="imagePreviewBox" class="img-preview-box"></div>
+      </div>
+
+      <div class="form-group">
+        <button type="button" class="btn-secondary" id="getGeoBtn" style="width:100%;"><i class="fa-solid fa-location-crosshairs"></i> 現在地から再取得</button>
+        <div id="geoStatus" class="geo-status-text">位置情報を取得済みです</div>
+      </div>
+
+      <div class="form-row-2col">
+        <div class="form-group">
+          <label>スポット名 <span class="required-badge">必須</span></label>
+          <input type="text" id="postTitle" required placeholder="例: 岡山後楽園">
+        </div>
+        <div class="form-group">
+          <label>エリア <span class="required-badge">必須</span></label>
+          <select id="postArea" required>
+            <option value="" disabled selected>選択してください</option>
+            <option value="岡山市">岡山市</option>
+            <option value="倉敷市">倉敷市</option>
+            <option value="瀬戸内市">瀬戸内市</option>
+            <option value="津山市">津山市</option>
+            <option value="備前市">備前市</option>
+            <option value="総社市">総社市</option>
+            <option value="その他岡山県内">その他岡山県内</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+          <label>おすすめ時間帯</label>
+          <select id="postTimeSlot">
+            <option value="all" selected>いつでもおすすめ</option>
+            <option value="day">昼向け (3:00〜17:59)</option>
+            <option value="night">夜向け (18:00〜2:59)</option>
+          </select>
+        </div>
+      
+      <div class="form-group">
+        <label>ハッシュタグ（スペース区切り）</label>
+        <input type="text" id="postTags" placeholder="#岡山 #グルメ #絶景">
+      </div>
+
+      <div class="form-group">
+        <label>住所</label>
+        <input type="text" id="postAddress" placeholder="例: 岡山県岡山市北区後楽園1-5">
+      </div>
+
+      <div class="form-group">
+        <label>関連リンク (URL)</label>
+        <input type="url" id="postExternalUrl" placeholder="https://example.com">
+      </div>
+
+      <div class="form-group">
+        <label>説明・コメント</label>
+        <textarea id="postDescription" rows="3" placeholder="スポットの見どころやおすすめの過ごし方"></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelPostBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitBtn">投稿を公開</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 投稿詳細モーダル -->
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal-sheet detail-sheet">
+    <div class="detail-top-nav">
+      <span class="detail-nav-title">投稿詳細</span>
+      <button class="close-btn" id="closeDetailModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="detail-content" id="detailContent"></div>
+  </div>
+</div>
+
+<!-- 相手ユーザープロフィールモーダル -->
+<div class="modal-backdrop" id="userProfileModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="upModalNickname">ユーザー情報</h2>
+      <button class="close-btn" id="closeUserProfileModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="profile-card" style="margin-bottom:12px;">
+      <div class="profile-avatar-box" id="upModalAvatarBox"><i class="fa-solid fa-user"></i></div>
+      <div class="profile-info">
+        <h3 id="upModalUsername">@user</h3>
+        <p id="upModalBio">プロフィール情報</p>
+        <div class="follow-counts">
+          <button class="follow-pill-btn" id="upModalFollowingBtn"><b>0</b> フォロー中</button>
+          <button class="follow-pill-btn" id="upModalFollowersBtn"><b>0</b> フォロワー</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button id="upModalFollowBtn" class="btn-primary" style="flex:1;"><i class="fa-solid fa-user-plus"></i> フォロー</button>
+      <button id="upModalDmBtn" class="btn-secondary" style="flex:1;"><i class="fa-regular fa-paper-plane"></i> メッセージ</button>
+    </div>
+    <h3 class="sub-heading">投稿一覧</h3>
+    <div class="spot-grid" id="upModalPostsGrid"></div>
+  </div>
+</div>
+
+<!-- 認証モーダル -->
+<div class="modal-backdrop" id="authModal">
+  <div class="modal-sheet auth-modal-sheet">
+    <div class="modal-header">
+      <h2 id="authModalTitle">ログイン</h2>
+      <button class="close-btn" id="closeAuthModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabSwitchLogin">ログイン</button>
+      <button class="auth-tab" id="tabSwitchRegister">アカウント作成</button>
+    </div>
+    <form id="authForm">
+      <div class="form-group">
+        <label>ユーザーID (半角英数)</label>
+        <input type="text" id="authUsername" required placeholder="例: okayama_user">
+      </div>
+      <div class="form-group" id="nicknameGroup" style="display:none;">
+        <label>表示名 (ニックネーム)</label>
+        <input type="text" id="authNickname" placeholder="例: 晴れの国太郎">
+      </div>
+      <div class="form-group">
+        <label>パスワード</label>
+        <input type="password" id="authPassword" required placeholder="パスワード">
+      </div>
+      <div class="auth-submit-row">
+        <button type="submit" class="btn-primary" id="authSubmitBtn">ログイン</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+  <!-- バッジ詳細ポップアップモーダル（画面中央表示） -->
+<div class="modal-backdrop" id="achievementDetailModal">
+  <div class="modal-sheet" style="text-align: center; max-width: 380px;">
+    <div class="modal-header">
+      <h2>アチーブメント詳細</h2>
+      <button class="close-btn" id="closeAchDetailModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="achDetailModalContent" style="padding: 10px 0;"></div>
+  </div>
+</div>
+
+<!-- 公式専用 スタンプラリー作成モーダル -->
+<div class="modal-backdrop" id="createRallyModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>新規スタンプラリー作成</h2>
+      <button class="close-btn" id="closeCreateRallyModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="createRallyForm">
+      <div class="form-group">
+        <label>スタンプラリー名 <span class="required-badge">必須</span></label>
+        <input type="text" id="rallyTitleInput" required placeholder="例: 倉敷カフェ巡りスタンプラリー">
+      </div>
+      <div class="form-group">
+        <label>ラリーの説明</label>
+        <textarea id="rallyDescInput" rows="2" placeholder="ラリーの概要や見どころ"></textarea>
+      </div>
+      <div class="form-group">
+        <label>達成報酬バッジ <span class="required-badge">必須</span></label>
+        <select id="rallyRewardBadgeSelect" required></select>
+      </div>
+      <div class="form-group">
+        <label>対象スポットを選択（投稿スポットから複数選択） <span class="required-badge">必須</span></label>
+        <div class="spot-select-list" id="rallySpotsCheckboxList"></div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelCreateRallyBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitCreateRallyBtn">ラリーを公開する</button>
+      </div>
+    </form>
+  </div>
+</div>
+  
+<!-- 公式専用 アチーブメントバッジ作成モーダル -->
+<div class="modal-backdrop" id="createBadgeModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>新規アチーブメントバッジ作成</h2>
+      <button class="close-btn" id="closeCreateBadgeModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="createBadgeForm">
+      <div class="form-group">
+        <label>バッジ画像 <span class="required-badge">必須</span></label>
+        <input type="file" id="badgeImageInput" accept="image/*" required>
+        <div id="badgePreviewBox" style="text-align:center; margin-top:8px;"></div>
+      </div>
+      <div class="form-group">
+        <label>バッジ名（タイトル） <span class="required-badge">必須</span></label>
+        <input type="text" id="badgeTitleInput" required placeholder="例: 児島ジーンズマスター">
+      </div>
+      <div class="form-group">
+        <label>イベントコード (英数字) <span class="required-badge">必須</span></label>
+        <input type="text" id="badgeCodeInput" required placeholder="例: KOJIMA2026">
+      </div>
+      <div class="form-group">
+        <label>バッジの説明</label>
+        <textarea id="badgeDescInput" rows="2" placeholder="バッジの獲得条件や詳細説明"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelCreateBadgeBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitCreateBadgeBtn">バッジを登録</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ★ ここに追加: 投稿編集モーダル -->
+<div class="modal-backdrop" id="editPostModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>投稿を編集</h2>
+      <button class="close-btn" id="closeEditPostModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="editPostForm">
+      <input type="hidden" id="editPostId">
+      <div class="form-group">
+        <label>スポット名 <span class="required-badge">必須</span></label>
+        <input type="text" id="editPostTitle" required>
+      </div>
+      <div class="form-group">
+        <label>エリア <span class="required-badge">必須</span></label>
+        <select id="editPostArea" required>
+          <option value="岡山市">岡山市</option>
+          <option value="倉敷市">倉敷市</option>
+          <option value="瀬戸内市">瀬戸内市</option>
+          <option value="津山市">津山市</option>
+          <option value="備前市">備前市</option>
+          <option value="総社市">総社市</option>
+          <option value="その他岡山県内">その他岡山県内</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>おすすめ時間帯</label>
+        <select id="editPostTimeSlot">
+          <option value="all">昼・夜いつでもおすすめ</option>
+          <option value="day">昼向け (3:00〜17:59)</option>
+          <option value="night">夜向け (18:00〜2:59)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>ハッシュタグ</label>
+        <input type="text" id="editPostTags">
+      </div>
+      <div class="form-group">
+        <label>住所</label>
+        <input type="text" id="editPostAddress">
+      </div>
+      <div class="form-group">
+        <label>関連リンク (URL)</label>
+        <input type="url" id="editPostExternalUrl">
+      </div>
+      <div class="form-group">
+        <label>説明・コメント</label>
+        <textarea id="editPostDescription" rows="3"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelEditPostBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="saveEditPostBtn">変更を保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
