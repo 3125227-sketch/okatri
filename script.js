@@ -2020,10 +2020,63 @@ function fetchBackgroundLocation() {
   }, { enableHighAccuracy: true, timeout: 8000 });
 }
 
+// ====================================================
+// ★ 1枚カメラ撮影 ＆ 複数枚アルバム選択の分岐処理
+// ====================================================
+// 「＋」ボタン用：カメラを直接起動（1枚）
 function handleOpenPostAction() {
   fetchBackgroundLocation();
-  const fileInput = document.getElementById("postImageInput");
-  if (fileInput) fileInput.click();
+  const cameraInput = document.getElementById("postCameraInput");
+  if (cameraInput) {
+    cameraInput.value = "";
+    cameraInput.click();
+  }
+}
+
+// ホームの「アルバムから複数枚投稿」ボタン用：アルバムを開く（最大4枚）
+function handleOpenMultiPostAction() {
+  fetchBackgroundLocation();
+  const multiInput = document.getElementById("postMultiImageInput");
+  if (multiInput) {
+    multiInput.value = "";
+    multiInput.click();
+  }
+}
+
+// 画像圧縮共通処理
+function processImageFile(file, callback) {
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const img = new Image();
+    img.src = evt.target.result;
+    img.onload = function() {
+      const canvas = document.createElement("canvas");
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h *= MAX / w; w = MAX; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL("image/jpeg", 0.75));
+    };
+  };
+  reader.readAsDataURL(file);
+}
+
+// プレビュー描画共通処理
+function renderImagePreviews(b64Array) {
+  const prevBox = document.getElementById("imagePreviewBox");
+  if (!prevBox) return;
+  prevBox.innerHTML = "";
+  b64Array.forEach(b64 => {
+    const img = document.createElement("img");
+    img.src = b64;
+    img.style.width = "70px";
+    img.style.height = "70px";
+    img.style.objectFit = "cover";
+    img.style.borderRadius = "var(--radius-md)";
+    img.style.border = "1px solid var(--border-subtle)";
+    prevBox.appendChild(img);
+  });
 }
 
 // ====================================================
@@ -2086,9 +2139,70 @@ function updateUserUI() {
 }
 
 function setupEventListeners() {
+  // プラスボタンは今まで通り「カメラ直接起動（1枚）」
   safeOnClick("sidebarPostBtn", handleOpenPostAction);
-  safeOnClick("topPostBtn", handleOpenPostAction);
   safeOnClick("mobileCenterPostBtn", handleOpenPostAction);
+
+  // ホームのボタンは「アルバムから複数枚選択」
+  safeOnClick("topPostBtn", handleOpenMultiPostAction);
+
+  // モーダル内の再選択ボタン
+  safeOnClick("modalRetakeCameraBtn", () => {
+    const cIn = document.getElementById("postCameraInput");
+    if (cIn) cIn.click();
+  });
+  safeOnClick("modalPickMultiBtn", () => {
+    const mIn = document.getElementById("postMultiImageInput");
+    if (mIn) mIn.click();
+  });
+
+  // ① カメラ撮影完了時のイベント（1枚）
+  const cameraInput = document.getElementById("postCameraInput");
+  if (cameraInput) {
+    cameraInput.addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const slotSelect = document.getElementById("postTimeSlot");
+      if (slotSelect) slotSelect.value = getInitialTimeSlot();
+
+      processImageFile(file, (b64) => {
+        currentUploadedImagesBase64 = [b64];
+        currentUploadedBase64 = b64;
+        renderImagePreviews(currentUploadedImagesBase64);
+        const pModal = document.getElementById("postModal");
+        if (pModal) pModal.classList.add("show");
+      });
+    });
+  }
+
+  // ② アルバム複数枚選択時のイベント（最大4枚）
+  const multiInput = document.getElementById("postMultiImageInput");
+  if (multiInput) {
+    multiInput.addEventListener("change", function(e) {
+      const files = Array.from(e.target.files).slice(0, 4);
+      if (!files || files.length === 0) return;
+
+      const slotSelect = document.getElementById("postTimeSlot");
+      if (slotSelect) slotSelect.value = getInitialTimeSlot();
+
+      currentUploadedImagesBase64 = [];
+      let loaded = 0;
+
+      files.forEach((file) => {
+        processImageFile(file, (b64) => {
+          currentUploadedImagesBase64.push(b64);
+          loaded++;
+          if (loaded === files.length) {
+            currentUploadedBase64 = currentUploadedImagesBase64[0];
+            renderImagePreviews(currentUploadedImagesBase64);
+            const pModal = document.getElementById("postModal");
+            if (pModal) pModal.classList.add("show");
+          }
+        });
+      });
+    });
+  }
 
   safeOnClick("openDrawerBtn", openMobileDrawer);
   safeOnClick("closeDrawerBtn", closeMobileDrawer);
@@ -2128,7 +2242,7 @@ function setupEventListeners() {
     const title = document.getElementById("routeResultTitle").textContent;
     const mapUrl = document.getElementById("googleMapsLink").href;
     const text = `【OKATRI】岡山旅行モデルコース: ${title}\nGoogleマップナビ: ${mapUrl}`;
-    window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(`${text}\n${mapUrl}`)}`, '_blank');
   });
 
   safeOnClick("shareRouteCopyBtn", () => {
@@ -2296,14 +2410,18 @@ function setupEventListeners() {
 
   safeOnClick("sortNewestBtn", () => {
     currentSortMode = "newest";
-    document.getElementById("sortNewestBtn").classList.add("active");
-    document.getElementById("sortPopularBtn").classList.remove("active");
+    const b1 = document.getElementById("sortNewestBtn");
+    const b2 = document.getElementById("sortPopularBtn");
+    if (b1) b1.classList.add("active");
+    if (b2) b2.classList.remove("active");
     applySortAndRender();
   });
   safeOnClick("sortPopularBtn", () => {
     currentSortMode = "popular";
-    document.getElementById("sortPopularBtn").classList.add("active");
-    document.getElementById("sortNewestBtn").classList.remove("active");
+    const b1 = document.getElementById("sortPopularBtn");
+    const b2 = document.getElementById("sortNewestBtn");
+    if (b1) b1.classList.add("active");
+    if (b2) b2.classList.remove("active");
     applySortAndRender();
   });
 
@@ -2328,16 +2446,24 @@ function setupEventListeners() {
   if (routeSpotSearch) routeSpotSearch.oninput = renderRouteSpotCheckboxes;
 
   safeOnClick("modeCustomBtn", () => {
-    document.getElementById("modeCustomBtn").classList.add("active");
-    document.getElementById("modeAiBtn").classList.remove("active");
-    document.getElementById("customRouteBox").style.display = "block";
-    document.getElementById("aiRouteBox").style.display = "none";
+    const b1 = document.getElementById("modeCustomBtn");
+    const b2 = document.getElementById("modeAiBtn");
+    const cBox = document.getElementById("customRouteBox");
+    const aBox = document.getElementById("aiRouteBox");
+    if (b1) b1.classList.add("active");
+    if (b2) b2.classList.remove("active");
+    if (cBox) cBox.style.display = "block";
+    if (aBox) aBox.style.display = "none";
   });
   safeOnClick("modeAiBtn", () => {
-    document.getElementById("modeAiBtn").classList.add("active");
-    document.getElementById("modeCustomBtn").classList.remove("active");
-    document.getElementById("customRouteBox").style.display = "none";
-    document.getElementById("aiRouteBox").style.display = "block";
+    const b1 = document.getElementById("modeAiBtn");
+    const b2 = document.getElementById("modeCustomBtn");
+    const cBox = document.getElementById("customRouteBox");
+    const aBox = document.getElementById("aiRouteBox");
+    if (b1) b1.classList.add("active");
+    if (b2) b2.classList.remove("active");
+    if (cBox) cBox.style.display = "none";
+    if (aBox) aBox.style.display = "block";
   });
 
   safeOnClick("generateRouteBtn", () => {
@@ -2424,9 +2550,7 @@ function setupEventListeners() {
       renderMyAchievements();
       renderPokedex();
 
-      if (db) {
-        await db.from("users_custom").update({ achievements: currentUser.achievements }).eq("user_id", currentUser.userId);
-      }
+      if (db) await db.from("users_custom").update({ achievements: currentUser.achievements }).eq("user_id", currentUser.userId);
 
       alert(`🎉 「${targetBadge.title}」を獲得しました！`);
       document.getElementById("claimAchievementModal").classList.remove("show");
@@ -2489,7 +2613,7 @@ function setupEventListeners() {
   if (avatarPosY) avatarPosY.addEventListener("input", renderCroppedAvatar);
   if (avatarZoom) avatarZoom.addEventListener("input", renderCroppedAvatar);
 
-  // プロフィール設定保存（★ メール＆通知設定対応）
+  // プロフィール設定保存（メール＆通知設定対応）
   const profileForm = document.getElementById("profileSettingsForm");
   if (profileForm) {
     profileForm.onsubmit = async (e) => {
@@ -2623,63 +2747,6 @@ function setupEventListeners() {
       }]);
     }
   });
-
-  // ★ 複数枚写真選択（最大4枚）
-  const postImgIn = document.getElementById("postImageInput");
-  if (postImgIn) {
-    postImgIn.addEventListener("change", function(e) {
-      const files = Array.from(e.target.files).slice(0, 4); // 最大4枚
-      const pModal = document.getElementById("postModal");
-      const prevBox = document.getElementById("imagePreviewBox");
-
-      const slotSelect = document.getElementById("postTimeSlot");
-      if (slotSelect) slotSelect.value = getInitialTimeSlot();
-
-      if (!files || files.length === 0) {
-        if (pModal) pModal.classList.add("show");
-        return;
-      }
-
-      currentUploadedImagesBase64 = [];
-      if (prevBox) prevBox.innerHTML = "";
-
-      let loadedCount = 0;
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-          const img = new Image();
-          img.src = evt.target.result;
-          img.onload = function() {
-            const canvas = document.createElement("canvas");
-            const MAX = 800;
-            let w = img.width, h = img.height;
-            if (w > MAX) { h *= MAX / w; w = MAX; }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-            const b64 = canvas.toDataURL("image/jpeg", 0.75);
-            currentUploadedImagesBase64.push(b64);
-
-            if (prevBox) {
-              const previewImg = document.createElement("img");
-              previewImg.src = b64;
-              previewImg.style.width = "70px";
-              previewImg.style.height = "70px";
-              previewImg.style.objectFit = "cover";
-              previewImg.style.borderRadius = "var(--radius-md)";
-              prevBox.appendChild(previewImg);
-            }
-
-            loadedCount++;
-            if (loadedCount === files.length) {
-              currentUploadedBase64 = currentUploadedImagesBase64[0];
-              if (pModal) pModal.classList.add("show");
-            }
-          };
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-  }
 
   safeOnClick("getGeoBtn", fetchBackgroundLocation);
 
@@ -2837,9 +2904,12 @@ function setupEventListeners() {
   if (authF) {
     authF.onsubmit = async (e) => {
       e.preventDefault();
-      const inputId = document.getElementById("authUsername").value.trim();
-      const password = document.getElementById("authPassword").value.trim();
-      const nickname = document.getElementById("authNickname").value.trim() || inputId;
+      const uIn = document.getElementById("authUsername");
+      const pIn = document.getElementById("authPassword");
+      const nIn = document.getElementById("authNickname");
+      const inputId = (uIn ? uIn.value.trim() : "");
+      const password = (pIn ? pIn.value.trim() : "");
+      const nickname = (nIn && nIn.value.trim()) ? nIn.value.trim() : inputId;
 
       if (isRegister) {
         const newU = {

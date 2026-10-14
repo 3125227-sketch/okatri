@@ -113,7 +113,7 @@
           <div class="hero-tag">OKAYAMA "PLUS TRIP"</div>
           <h1 class="welcome-text">もっと気軽に、もっと楽しく、もっと岡山へ。</h1>
           <p class="hero-sub">地元のリアルな声を届けるオープンコミュニティ</p>
-          <button class="btn-primary mobile-top-post-btn" id="topPostBtn"><i class="fa-solid fa-camera"></i> 写真を撮って投稿</button>
+          <button class="btn-primary mobile-top-post-btn" id="topPostBtn"><i class="fa-solid fa-images"></i> アルバムから投稿</button>
         </div>
 
         <!-- お知らせバナーカード -->
@@ -548,9 +548,18 @@
       <button class="close-btn" id="closePostModalBtn"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <form id="postForm">
-      <div class="form-group">
-        <label>写真 (最大4枚まで選択可能)</label>
-        <input type="file" id="postImageInput" accept="image/*" multiple>
+       <div class="form-group">
+        <label id="postImgLabel">写真</label>
+        <!-- カメラ直接起動用（1枚） -->
+        <input type="file" id="postCameraInput" accept="image/*" capture="environment" style="display:none;">
+        <!-- アルバムから複数枚選択用（最大4枚） -->
+        <input type="file" id="postMultiImageInput" accept="image/*" multiple style="display:none;">
+
+        <!-- モーダル内でも選び直せるボタン -->
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <button type="button" class="btn-secondary" id="modalRetakeCameraBtn" style="flex:1; font-size:11px;"><i class="fa-solid fa-camera"></i> カメラで撮影</button>
+          <button type="button" class="btn-secondary" id="modalPickMultiBtn" style="flex:1; font-size:11px;"><i class="fa-solid fa-images"></i> アルバムから選択</button>
+        </div>
         <div id="imagePreviewBox" style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;"></div>
       </div>
 
