@@ -769,13 +769,11 @@ window.openDetailFromMap = function(postId) {
   if (post) openDetail(post);
 };
 
-// ====================================================
-// 6. 投稿一覧 ＆ 複数枚スライダー表示
+// // ====================================================
+// 6. 投稿一覧 ＆ 週間人気 ＆ フォロー中フィルター
 // ====================================================
 function applySortAndRender() {
   let list = [...postsData];
-  const searchInput = document.getElementById("searchInput");
-  const query = searchInput ? searchInput.value.toLowerCase() : "";
 
   // ブロック/ミュートされたユーザーの投稿を除外
   if (currentUser) {
@@ -783,18 +781,36 @@ function applySortAndRender() {
     list = list.filter(p => !(currentUser.muted_users || []).includes(p.user_id));
   }
 
+  // 昼/夜フィルター
   list = list.filter(p => isPostMatchTimeMode(p, currentActiveTimeMode));
 
-  if (query) {
-    list = list.filter(p => 
-      (p.title && p.title.toLowerCase().includes(query)) ||
-      (p.area && p.area.toLowerCase().includes(query)) ||
-      (p.tags && p.tags.toLowerCase().includes(query))
-    );
-  }
-
+  // ソートモードによる分岐
   if (currentSortMode === "popular") {
-    list.sort((a, b) => parseArray(b.likes).length - parseArray(a.likes).length);
+    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+
+    // ① 今週（7日以内）の投稿
+    const thisWeekList = list.filter(p => {
+      const postTime = p.created_at ? new Date(p.created_at).getTime() : Date.now();
+      return postTime >= oneWeekAgo;
+    });
+    thisWeekList.sort((a, b) => parseArray(b.likes).length - parseArray(a.likes).length);
+
+    // ② 過去（7日より前）の投稿
+    const olderList = list.filter(p => {
+      const postTime = p.created_at ? new Date(p.created_at).getTime() : Date.now();
+      return postTime < oneWeekAgo;
+    });
+    olderList.sort((a, b) => parseArray(b.likes).length - parseArray(a.likes).length);
+
+    // 今週の投稿 ➔ 過去の投稿 の順でシームレスに結合
+    list = [...thisWeekList, ...olderList];
+  } else if (currentSortMode === "following") {
+    // ★ フォロー中のみ
+    if (!currentUser || (currentUser.following || []).length === 0) {
+      renderPosts([]);
+      return;
+    }
+    list = list.filter(p => (currentUser.following || []).includes(p.user_id));
   }
 
   renderPosts(list);
@@ -931,6 +947,65 @@ function renderUserSearch(users) {
   });
 }
 
+function renderDiscoverPosts(items) {
+  const grid = document.getElementById("discoverPostsGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  if (items.length === 0) {
+    grid.innerHTML = `<div class="empty-state">該当する投稿は見つかりませんでした</div>`;
+    return;
+  }
+  items.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "spot-card";
+    const mainImg = (p.images && p.images[0]) || p.image_url;
+    card.innerHTML = `
+      <div class="card-img-wrap"><img src="${mainImg}" class="card-img" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'"></div>
+      <div class="card-body">
+        <div class="card-area">@${p.area}</div>
+        <div class="card-title">${p.title}</div>
+      </div>
+    `;
+    card.onclick = () => openDetail(p);
+    grid.appendChild(card);
+  });
+}
+
+// 共有ルート一覧の描画
+let sharedRoutesData = JSON.parse(localStorage.getItem("okatari_shared_routes")) || [];
+
+function renderDiscoverRoutes(query = "") {
+  const list = document.getElementById("discoverRoutesList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  let filtered = sharedRoutesData;
+  if (query) {
+    filtered = filtered.filter(r => 
+      (r.title && r.title.toLowerCase().includes(query)) ||
+      (r.theme && r.theme.toLowerCase().includes(query)) ||
+      (r.desc && r.desc.toLowerCase().includes(query))
+    );
+  }
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state">共有されたルートはまだありません</div>`;
+    return;
+  }
+
+  filtered.forEach(r => {
+    const card = document.createElement("div");
+    card.className = "clean-card-box";
+    card.innerHTML = `
+      <div style="font-size:11px; color:var(--primary-accent); font-weight:700;">${r.theme || '#モデルコース'}</div>
+      <h3 style="font-size:15px; font-weight:700; margin:4px 0 6px;">${r.title}</h3>
+      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px;">${r.desc || ''}</p>
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">投稿者: ${r.author}</div>
+      <a href="${r.mapUrl}" target="_blank" class="btn-secondary" style="font-size:11px; width:100%; text-decoration:none;"><i class="fa-solid fa-map-location-dot"></i> Googleマップでこのコースを開く</a>
+    `;
+    list.appendChild(card);
+  });
+}
 // ====================================================
 // 8. 相手プロフィール ＆ ブロック・ミュート
 // ====================================================
@@ -946,6 +1021,25 @@ function openUserProfile(userId, fallbackNickname) {
   if (nickEl) nickEl.innerHTML = `${targetUser.nickname} ${adminBadge}`;
   if (userEl) userEl.textContent = `@${targetUser.user_id}`;
   if (bioEl) bioEl.textContent = targetUser.bio || "自己紹介文はありません";
+  // openUserProfile 関数内の bioEl の処理のすぐ下に追加
+  const upBadgesBox = document.getElementById("upModalFeaturedBadges");
+  if (upBadgesBox) {
+    upBadgesBox.innerHTML = "";
+    const featured = parseArray(targetUser.featured_badges || "[]");
+    if (featured.length === 0) {
+      upBadgesBox.innerHTML = `<span style="font-size:11px; color:#94a3b8;">セット中のバッジはありません</span>`;
+    } else {
+      featured.forEach(badgeTitle => {
+        const found = (targetUser.achievements ? parseArray(targetUser.achievements) : []).find(a => a.title === badgeTitle) ||
+                      masterBadgesData.find(b => b.title === badgeTitle) || { title: badgeTitle };
+        const slot = document.createElement("div");
+        slot.className = "featured-badge-slot filled";
+        slot.innerHTML = found.image_url ? `<img src="${found.image_url}" title="${found.title}">` : `<i class="fa-solid fa-award"></i>`;
+        slot.onclick = () => openAchievementDetailModal(found);
+        upBadgesBox.appendChild(slot);
+      });
+    }
+  }
   
   const avatarBox = document.getElementById("upModalAvatarBox");
   if (avatarBox) avatarBox.innerHTML = targetUser.avatar ? `<img src="${targetUser.avatar}">` : `<i class="fa-solid fa-user"></i>`;
@@ -2003,13 +2097,17 @@ function fetchBackgroundLocation() {
         const areaSelect = document.getElementById("postArea");
         const addr = data.display_name;
         if (areaSelect) {
-          if (addr.includes("岡山市")) areaSelect.value = "岡山市";
-          else if (addr.includes("倉敷市")) areaSelect.value = "倉敷市";
-          else if (addr.includes("瀬戸内市")) areaSelect.value = "瀬戸内市";
-          else if (addr.includes("津山市")) areaSelect.value = "津山市";
-          else if (addr.includes("備前市")) areaSelect.value = "備前市";
-          else if (addr.includes("総社市")) areaSelect.value = "総社市";
-          else areaSelect.value = "その他岡山県内";
+          const areas = [
+            "岡山市北区", "岡山市中区", "岡山市東区", "岡山市南区",
+            "倉敷市", "津山市", "玉野市", "笠岡市", "井原市", "総社市", "高梁市", "新見市",
+            "備前市", "瀬戸内市", "赤磐市", "真庭市", "美作市", "浅口市",
+            "和気町", "早島町", "里庄町", "矢掛町", "鏡野町", "勝央町", "奈義町", "久米南町", "美咲町", "吉備中央町",
+            "新庄村", "西粟倉村"
+          ];
+          const found = areas.find(a => addr.includes(a.replace(/市|区|町|村/g, '')));
+          if (found) {
+            areaSelect.value = found;
+          }
         }
       }
     } catch(e) {
@@ -2252,6 +2350,45 @@ function setupEventListeners() {
     alert("ルート情報をコピーしました！メッセージ等に貼り付けて共有できます。");
   });
 
+  // ルート投稿モーダル
+  let currentGeneratingRouteData = null;
+  safeOnClick("openPublishRouteModalBtn", () => {
+    if (!currentUser) { alert("ルートを投稿するにはログインが必要です"); return; }
+    const title = document.getElementById("routeResultTitle").textContent;
+    document.getElementById("pubRouteTitleInput").value = title;
+    document.getElementById("publishRouteModal").classList.add("show");
+  });
+  safeOnClick("closePublishRouteModalBtn", () => document.getElementById("publishRouteModal").classList.remove("show"));
+  safeOnClick("cancelPublishRouteBtn", () => document.getElementById("publishRouteModal").classList.remove("show"));
+
+  const pubRouteForm = document.getElementById("publishRouteForm");
+  if (pubRouteForm) {
+    pubRouteForm.onsubmit = (e) => {
+      e.preventDefault();
+      const title = document.getElementById("pubRouteTitleInput").value.trim();
+      const theme = document.getElementById("pubRouteThemeInput").value.trim();
+      const desc = document.getElementById("pubRouteDescInput").value.trim();
+      const mapUrl = document.getElementById("googleMapsLink").href;
+
+      const newSharedRoute = {
+        id: generateUniqueId("route"),
+        title: title,
+        theme: theme || "#岡山モデルコース",
+        desc: desc,
+        mapUrl: mapUrl,
+        author: currentUser.nickname,
+        user_id: currentUser.userId,
+        date: new Date().toLocaleDateString("ja-JP")
+      };
+
+      sharedRoutesData.unshift(newSharedRoute);
+      localStorage.setItem("okatari_shared_routes", JSON.stringify(sharedRoutesData));
+
+      alert("🎉 ルートをコミュニティに公開しました！\n「検索」タブの「ルート」からいつでも見られます。");
+      document.getElementById("publishRouteModal").classList.remove("show");
+    };
+  }
+  
   // 公式バッジ画像選択
   let badgeImageBase64 = "";
   const badgeImgIn = document.getElementById("badgeImageInput");
@@ -2408,22 +2545,34 @@ function setupEventListeners() {
   safeOnClick("closeEditPostModalBtn", () => document.getElementById("editPostModal").classList.remove("show"));
   safeOnClick("cancelEditPostBtn", () => document.getElementById("editPostModal").classList.remove("show"));
 
+  // 最新
   safeOnClick("sortNewestBtn", () => {
     currentSortMode = "newest";
-    const b1 = document.getElementById("sortNewestBtn");
-    const b2 = document.getElementById("sortPopularBtn");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
+    updateFeedTabsUI("sortNewestBtn");
     applySortAndRender();
   });
+
+  // 週間人気
   safeOnClick("sortPopularBtn", () => {
     currentSortMode = "popular";
-    const b1 = document.getElementById("sortPopularBtn");
-    const b2 = document.getElementById("sortNewestBtn");
-    if (b1) b1.classList.add("active");
-    if (b2) b2.classList.remove("active");
+    updateFeedTabsUI("sortPopularBtn");
     applySortAndRender();
   });
+
+  // フォロー中
+  safeOnClick("sortFollowingBtn", () => {
+    currentSortMode = "following";
+    updateFeedTabsUI("sortFollowingBtn");
+    applySortAndRender();
+  });
+
+  // タブの下線（active）切り替え関数
+  function updateFeedTabsUI(activeId) {
+    ["sortNewestBtn", "sortPopularBtn", "sortFollowingBtn"].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.toggle("active", id === activeId);
+    });
+  }
 
   const searchInput = document.getElementById("searchInput");
   if (searchInput) searchInput.oninput = applySortAndRender;
@@ -3012,6 +3161,57 @@ function setupEventListeners() {
   const mapSearchInput = document.getElementById("mapSearchInput");
   if (mapSearchInput) {
     mapSearchInput.addEventListener("input", (e) => updateMapMarkers(e.target.value));
+  }
+  // 統合検索（投稿 / ルート / ユーザー）の切り替え
+  let currentDiscoverTab = "posts";
+  safeOnClick("dTabPostsBtn", () => switchDiscoverTab("posts"));
+  safeOnClick("dTabRoutesBtn", () => switchDiscoverTab("routes"));
+  safeOnClick("dTabUsersBtn", () => switchDiscoverTab("users"));
+
+  function switchDiscoverTab(tab) {
+    currentDiscoverTab = tab;
+    // クラス切り替え
+    ["dTabPostsBtn", "dTabRoutesBtn", "dTabUsersBtn"].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.classList.remove("active");
+    });
+    if (tab === "posts") document.getElementById("dTabPostsBtn").classList.add("active");
+    if (tab === "routes") document.getElementById("dTabRoutesBtn").classList.add("active");
+    if (tab === "users") document.getElementById("dTabUsersBtn").classList.add("active");
+
+    const pSec = document.getElementById("discoverPostsSection");
+    const rSec = document.getElementById("discoverRoutesSection");
+    const uSec = document.getElementById("discoverUsersSection");
+
+    if (pSec) pSec.style.display = tab === "posts" ? "block" : "none";
+    if (rSec) rSec.style.display = tab === "routes" ? "block" : "none";
+    if (uSec) uSec.style.display = tab === "users" ? "block" : "none";
+
+    renderDiscoverResults();
+  }
+
+  const dInput = document.getElementById("discoverSearchInput");
+  if (dInput) {
+    dInput.addEventListener("input", renderDiscoverResults);
+  }
+
+  function renderDiscoverResults() {
+    const query = (document.getElementById("discoverSearchInput").value || "").toLowerCase().trim();
+    if (currentDiscoverTab === "posts") {
+      let filtered = postsData;
+      if (query) {
+        filtered = filtered.filter(p => 
+          (p.title && p.title.toLowerCase().includes(query)) ||
+          (p.area && p.area.toLowerCase().includes(query)) ||
+          (p.tags && p.tags.toLowerCase().includes(query))
+        );
+      }
+      renderDiscoverPosts(filtered);
+    } else if (currentDiscoverTab === "routes") {
+      renderDiscoverRoutes(query);
+    } else if (currentDiscoverTab === "users") {
+      renderUserSearch(allUsersData);
+    }
   }
 
   setupAiRouteFeature();

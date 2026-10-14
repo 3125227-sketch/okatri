@@ -433,7 +433,7 @@ body {
 
 .card-img-wrap {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 4;
   background: #f1f5f9;
   overflow: hidden;
   position: relative;
@@ -1039,7 +1039,7 @@ body {
 .carousel-container {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
   background: #f1f5f9;
 }
@@ -1177,4 +1177,103 @@ body {
   width: 18px;
   height: 18px;
   cursor: pointer;
+}
+/* ==========================================
+   【アップデート】WEAR風 アンダーライン式ソートタブ
+========================================== */
+.feed-tabs-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 18px;
+  padding-bottom: 0;
+}
+.feed-tab-underline {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 10px 4px 12px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease;
+}
+.feed-tab-underline:hover {
+  color: var(--text-primary);
+}
+.feed-tab-underline.active {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.feed-tab-underline.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2.5px;
+  background: var(--text-primary);
+  border-radius: 2px;
+}
+
+/* ==========================================
+   【アップデート】スマホ版 投稿グリッドを1列（大きく表示）に変更
+========================================== */
+.spot-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* スマホ時は1列で大きく見せる */
+  gap: 16px;
+}
+@media (min-width: 650px) {
+  .spot-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+}
+@media (min-width: 950px) {
+  .spot-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+}
+
+/* ==========================================
+   【アップデート】スマホ版 投稿詳細・フォロー一覧の全画面（一番上まで）表示
+========================================== */
+@media (max-width: 767px) {
+  #detailModal .modal-sheet,
+  #userListModal .modal-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    top: 0 !important;
+    padding: env(safe-area-inset-top, 16px) 16px 85px 16px !important;
+  }
+}
+
+/* ==========================================
+   統合検索タブ（投稿 / ルート / ユーザー）
+========================================== */
+.discover-tab-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.discover-tab-btn {
+  flex: 1;
+  max-width: 130px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: #f1f5f9;
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+}
+.discover-tab-btn.active {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
 }

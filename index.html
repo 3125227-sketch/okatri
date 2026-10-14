@@ -95,12 +95,9 @@
     <header class="mobile-header">
       <button class="hamburger-btn" id="openDrawerBtn" title="メニュー"><i class="fa-solid fa-bars"></i></button>
       <div class="header-title-centered" id="pageTitle">OKATRI</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <div class="notify-bell-wrap" id="mobileNotifyBellBtn" title="通知">
-          <i class="fa-regular fa-bell" style="font-size:18px; color:var(--text-primary);"></i>
-          <span class="notify-badge-count" id="mobileNotifyCount">0</span>
-        </div>
-        <button class="header-btn" id="mobileAuthBtn">ログイン</button>
+      <div class="notify-bell-wrap" id="mobileNotifyBellBtn" title="通知">
+        <i class="fa-regular fa-bell" style="font-size:18px; color:var(--text-primary);"></i>
+        <span class="notify-badge-count" id="mobileNotifyCount">0</span>
       </div>
     </header>
 
@@ -140,16 +137,10 @@
   </div>
 </div>
         <!-- コントロールバー（ソート＆検索） -->
-        <div class="feed-control-row">
-          <div class="sort-tabs">
-            <button class="sort-tab active" id="sortNewestBtn"><i class="fa-regular fa-clock"></i> 最新順</button>
-            <button class="sort-tab" id="sortPopularBtn"><i class="fa-solid fa-arrow-trend-up"></i> 人気順</button>
-          </div>
-
-          <div class="search-box">
-            <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input type="text" id="searchInput" placeholder="スポット名・エリア・#タグで検索">
-          </div>
+        <div class="feed-tabs-container">
+          <button class="feed-tab-underline active" id="sortNewestBtn">最新</button>
+          <button class="feed-tab-underline" id="sortPopularBtn">おすすめ</button>
+          <button class="feed-tab-underline" id="sortFollowingBtn">フォロー中</button>
         </div>
 
         <!-- 投稿グリッド（PC・スマホ両対応） -->
@@ -270,6 +261,10 @@
                 <button type="button" class="btn-share-line" id="shareRouteLineBtn"><i class="fa-brands fa-line"></i> LINE</button>
                 <button type="button" class="btn-share-copy" id="shareRouteCopyBtn"><i class="fa-regular fa-copy"></i> コピー</button>
               </div>
+              <!-- ★ 追加: ルート投稿ボタン -->
+              <button type="button" class="btn-primary" id="openPublishRouteModalBtn" style="width:100%; margin-top:10px; background:#0f172a; border-color:#0f172a;">
+                <i class="fa-solid fa-map-location-dot"></i> このルートをコミュニティに投稿する
+              </button>
             </div>
             <div id="routePlaceholder" class="clean-card-box route-placeholder-card">
               <div style="font-size:28px; margin-bottom:8px; color:#94a3b8;"><i class="fa-regular fa-map"></i></div>
@@ -291,18 +286,38 @@
         </div>
       </section>
 
-      <!-- 5. アカウント検索タブ -->
+      <!-- 5. 統合検索タブ（投稿 / ルート / ユーザー） -->
       <section id="tabAccounts" class="tab-pane">
         <div class="section-title-box">
-          <h2 class="section-heading">ユーザー検索</h2>
-          <p class="section-desc">ユーザーIDまたはニックネームで探す</p>
+          <h2 class="section-heading">見つける</h2>
+          <p class="section-desc">スポット、モデルコース、ユーザーを探す</p>
         </div>
+
+        <!-- 3段切り替えタブ -->
+       <div class="feed-tabs-container" style="margin-bottom:16px;">
+          <button class="feed-tab-underline active" id="dTabPostsBtn">投稿</button>
+          <button class="feed-tab-underline" id="dTabRoutesBtn">ルート</button>
+          <button class="feed-tab-underline" id="dTabUsersBtn">ユーザー</button>
+        </div>
+
         <div class="search-box" style="margin-bottom:16px;">
           <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-          <input type="text" id="userSearchInput" placeholder="ユーザーID・ニックネームで検索">
+          <input type="text" id="discoverSearchInput" placeholder="キーワード・スポット名・#タグで検索">
         </div>
-        <div class="user-search-grid" id="userSearchResultGrid">
-          <div class="empty-state">ユーザーを読み込み中...</div>
+
+        <!-- 投稿検索結果 -->
+        <div id="discoverPostsSection">
+          <div class="spot-grid" id="discoverPostsGrid"></div>
+        </div>
+
+        <!-- ルート検索結果 -->
+        <div id="discoverRoutesSection" style="display:none;">
+          <div id="discoverRoutesList" style="display:flex; flex-direction:column; gap:12px;"></div>
+        </div>
+
+        <!-- ユーザー検索結果 -->
+        <div id="discoverUsersSection" style="display:none;">
+          <div class="user-search-grid" id="userSearchResultGrid"></div>
         </div>
       </section>
 
@@ -575,16 +590,46 @@
         </div>
         <div class="form-group">
           <label>エリア <span class="required-badge">必須</span></label>
-          <select id="postArea" required>
-            <option value="" disabled selected>選択してください</option>
-            <option value="岡山市">岡山市</option>
-            <option value="倉敷市">倉敷市</option>
-            <option value="瀬戸内市">瀬戸内市</option>
-            <option value="津山市">津山市</option>
-            <option value="備前市">備前市</option>
-            <option value="総社市">総社市</option>
-            <option value="その他岡山県内">その他岡山県内</option>
-          </select>
+          <!-- 新規投稿（id="postArea"）と 編集（id="editPostArea"）の両方をこの選択肢に変更 -->
+<select id="postArea" required>
+  <option value="" disabled selected>選択してください</option>
+  <optgroup label="岡山市">
+    <option value="岡山市北区">岡山市北区</option>
+    <option value="岡山市中区">岡山市中区</option>
+    <option value="岡山市東区">岡山市東区</option>
+    <option value="岡山市南区">岡山市南区</option>
+  </optgroup>
+  <optgroup label="市部">
+    <option value="倉敷市">倉敷市</option>
+    <option value="津山市">津山市</option>
+    <option value="玉野市">玉野市</option>
+    <option value="笠岡市">笠岡市</option>
+    <option value="井原市">井原市</option>
+    <option value="総社市">総社市</option>
+    <option value="高梁市">高梁市</option>
+    <option value="新見市">新見市</option>
+    <option value="備前市">備前市</option>
+    <option value="瀬戸内市">瀬戸内市</option>
+    <option value="赤磐市">赤磐市</option>
+    <option value="真庭市">真庭市</option>
+    <option value="美作市">美作市</option>
+    <option value="浅口市">浅口市</option>
+  </optgroup>
+  <optgroup label="町部・村部">
+    <option value="和気町">和気町</option>
+    <option value="早島町">早島町</option>
+    <option value="里庄町">里庄町</option>
+    <option value="矢掛町">矢掛町</option>
+    <option value="鏡野町">鏡野町</option>
+    <option value="勝央町">勝央町</option>
+    <option value="奈義町">奈義町</option>
+    <option value="久米南町">久米南町</option>
+    <option value="美咲町">美咲町</option>
+    <option value="吉備中央町">吉備中央町</option>
+    <option value="新庄村">新庄村</option>
+    <option value="西粟倉村">西粟倉村</option>
+  </optgroup>
+</select>
         </div>
       </div>
 
@@ -648,6 +693,12 @@
       <div class="profile-info">
         <h3 id="upModalUsername">@user</h3>
         <p id="upModalBio">プロフィール情報</p>
+        
+        <!-- ★ 追加: 相手のセット中バッジ -->
+        <div id="upModalBadgesArea" style="margin-top:8px; margin-bottom:8px;">
+          <div style="font-size:11px; font-weight:600; color:var(--text-secondary); margin-bottom:4px;">セット中バッジ</div>
+          <div class="featured-badges-row" id="upModalFeaturedBadges"></div>
+        </div>
         <div class="follow-counts">
           <button class="follow-pill-btn" id="upModalFollowingBtn"><b>0</b> フォロー中</button>
           <button class="follow-pill-btn" id="upModalFollowersBtn"><b>0</b> フォロワー</button>
@@ -792,13 +843,42 @@
       <div class="form-group">
         <label>エリア <span class="required-badge">必須</span></label>
         <select id="editPostArea" required>
-          <option value="岡山市">岡山市</option>
-          <option value="倉敷市">倉敷市</option>
-          <option value="瀬戸内市">瀬戸内市</option>
-          <option value="津山市">津山市</option>
-          <option value="備前市">備前市</option>
-          <option value="総社市">総社市</option>
-          <option value="その他岡山県内">その他岡山県内</option>
+          <optgroup label="岡山市">
+    <option value="岡山市北区">岡山市北区</option>
+    <option value="岡山市中区">岡山市中区</option>
+    <option value="岡山市東区">岡山市東区</option>
+    <option value="岡山市南区">岡山市南区</option>
+  </optgroup>
+  <optgroup label="市部">
+    <option value="倉敷市">倉敷市</option>
+    <option value="津山市">津山市</option>
+    <option value="玉野市">玉野市</option>
+    <option value="笠岡市">笠岡市</option>
+    <option value="井原市">井原市</option>
+    <option value="総社市">総社市</option>
+    <option value="高梁市">高梁市</option>
+    <option value="新見市">新見市</option>
+    <option value="備前市">備前市</option>
+    <option value="瀬戸内市">瀬戸内市</option>
+    <option value="赤磐市">赤磐市</option>
+    <option value="真庭市">真庭市</option>
+    <option value="美作市">美作市</option>
+    <option value="浅口市">浅口市</option>
+  </optgroup>
+  <optgroup label="町部・村部">
+    <option value="和気町">和気町</option>
+    <option value="早島町">早島町</option>
+    <option value="里庄町">里庄町</option>
+    <option value="矢掛町">矢掛町</option>
+    <option value="鏡野町">鏡野町</option>
+    <option value="勝央町">勝央町</option>
+    <option value="奈義町">奈義町</option>
+    <option value="久米南町">久米南町</option>
+    <option value="美咲町">美咲町</option>
+    <option value="吉備中央町">吉備中央町</option>
+    <option value="新庄村">新庄村</option>
+    <option value="西粟倉村">西粟倉村</option>
+  </optgroup>
         </select>
       </div>
       <div class="form-group">
@@ -842,6 +922,33 @@
     <div id="notifyListContainer" style="max-height:60vh; overflow-y:auto;">
       <div class="empty-state">新しい通知はありません</div>
     </div>
+  </div>
+</div>
+  <!-- ルート投稿モーダル -->
+<div class="modal-backdrop" id="publishRouteModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>ルートをコミュニティに投稿</h2>
+      <button class="close-btn" id="closePublishRouteModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="publishRouteForm">
+      <div class="form-group">
+        <label>ルートのタイトル <span class="required-badge">必須</span></label>
+        <input type="text" id="pubRouteTitleInput" required placeholder="例: 岡山駅から倉敷美観地区のんびり1日コース">
+      </div>
+      <div class="form-group">
+        <label>テーマ・タグ</label>
+        <input type="text" id="pubRouteThemeInput" placeholder="例: #王道 #グルメ #カフェ">
+      </div>
+      <div class="form-group">
+        <label>コースの見どころ・説明</label>
+        <textarea id="pubRouteDescInput" rows="3" placeholder="このコースのおすすめポイントや巡り方のコツ"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelPublishRouteBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitPublishRouteBtn">ルートを投稿する</button>
+      </div>
+    </form>
   </div>
 </div>
 
