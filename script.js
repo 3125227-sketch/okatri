@@ -1619,19 +1619,19 @@ function openEditPostModal(post) {
   document.getElementById("editPostModal").classList.add("show");
 }
 
+// // // // ====================================================
+// 10. 投稿詳細（★ ネイティブシェア ＆ コメントシート連動）
 // ====================================================
-// 10. 投稿詳細（★ カルーセル・スレッド・シェア対応）
-// ====================================================
+let currentActiveDetailPost = null;
+
 function openDetail(item) {
+  currentActiveDetailPost = item;
   const content = document.getElementById("detailContent");
   if (!content) return;
   const isMine = currentUser && currentUser.userId === item.user_id;
   const isOfficial = currentUser && currentUser.is_admin;
   
-  // スレッドコメントの抽出
   const postComments = commentsData.filter(c => c.post_id === item.id);
-  const rootComments = postComments.filter(c => !c.parent_id);
-
   const likes = parseArray(item.likes);
   const isLiked = currentUser && likes.includes(currentUser.userId);
   const isBookmarked = currentUser && currentUser.bookmarks && currentUser.bookmarks.includes(item.id);
@@ -1657,19 +1657,52 @@ function openDetail(item) {
       </div>
     `;
   } else {
-    imageHtml = `<img src="${displayImages[0]}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" style="width:100%; height:260px; object-fit:cover; border-radius:var(--radius-md); margin-bottom:12px; border:1px solid var(--border-subtle);">`;
+    imageHtml = `<img src="${displayImages[0]}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" style="width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:var(--radius-md); margin-bottom:12px; border:1px solid var(--border-subtle);">`;
   }
 
   content.innerHTML = `
     ${imageHtml}
     
+    <!-- ★ 画像2枚目風アクションバー -->
+    <div class="insta-action-bar">
+      <div class="insta-action-left">
+        <!-- いいね -->
+        <button id="detailLikeBtn" class="insta-icon-btn ${isLiked ? 'liked' : ''}">
+          <i class="${isLiked ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}"></i>
+        </button>
+        <!-- いいねした人一覧 -->
+        <span id="detailLikeCountBtn" class="action-count-clickable" title="いいねした人一覧">${likes.length}</span>
+
+        <!-- ★ 吹き出しボタン（押すと下からコメントシートが出る） -->
+        <button id="openCommentsSheetBtn" class="insta-icon-btn" title="コメントを開く">
+          <i class="fa-regular fa-comment"></i>
+        </button>
+        <span class="action-count" id="detailCommentCount">${postComments.length}</span>
+
+        <!-- ★ 紙飛行機ボタン（押すとOSの共有シートが出る） -->
+        <button id="sharePostPlaneBtn" class="insta-icon-btn" title="共有">
+          <i class="fa-regular fa-paper-plane"></i>
+        </button>
+      </div>
+
+      <div class="insta-action-right">
+        <button id="setStartSpotBtn" class="btn-secondary" style="font-size:11px; padding:5px 10px; border-radius:var(--radius-sm);">
+          <i class="fa-solid fa-route"></i> 出発地
+        </button>
+        <button id="detailBmBtn" class="insta-icon-btn ${isBookmarked ? 'bookmarked' : ''}" title="保存">
+          <i class="${isBookmarked ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'}"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 投稿情報 -->
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
       <span style="color:var(--primary-accent); font-weight:600; font-size:12px;">@${item.area}</span>
       ${!isMine && item.user_id ? `<button id="detailUserBtn" class="btn-secondary" style="padding:4px 10px; font-size:11px;"><i class="fa-regular fa-user"></i> ${item.nickname} ${adminBadge}</button>` : ''}
     </div>
     
-    <h2 style="font-size:18px; font-weight:700; margin:4px 0 8px; color:var(--text-primary);">${item.title}</h2>
-    <div style="margin-bottom:10px;">${tagsHtml}</div>
+    <h2 style="font-size:17px; font-weight:700; margin:4px 0 6px; color:var(--text-primary);">${item.title}</h2>
+    <div style="margin-bottom:8px;">${tagsHtml}</div>
     <p style="font-size:13px; line-height:1.6; margin-bottom:12px; color:var(--text-primary);">${item.description || ''}</p>
     
     ${item.external_url ? `
@@ -1681,70 +1714,49 @@ function openDetail(item) {
     ` : ''}
 
     <div style="font-size:12px; font-weight:500; margin-bottom:8px; color:var(--text-secondary);"><i class="fa-solid fa-location-dot" style="margin-right:4px;"></i> ${item.address || '岡山県'}</div>
-    <iframe style="width:100%; height:140px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);" 
+    <iframe style="width:100%; height:130px; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin-bottom:14px;" 
       src="https://maps.google.co.jp/maps?output=embed&q=${encodeURIComponent(item.address || item.title)}">
     </iframe>
 
-    <!-- SNSシェアボタン -->
-    <div class="share-buttons-row">
-      <button class="btn-share-x" id="sharePostXBtn"><i class="fa-brands fa-x-twitter"></i> Xでシェア</button>
-      <button class="btn-share-line" id="sharePostLineBtn"><i class="fa-brands fa-line"></i> LINE</button>
-      <button class="btn-share-copy" id="sharePostCopyBtn"><i class="fa-regular fa-copy"></i> URLコピー</button>
-    </div>
-
-    <div class="detail-action-buttons">
-      <button id="detailLikeBtn" class="btn-secondary" style="background:${isLiked ? '#0f172a' : '#fff'}; color:${isLiked ? '#fff' : 'inherit'}; flex:1;">
-        <i class="${isLiked ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}" style="color:${isLiked ? '#f02868' : 'inherit'};"></i> いいね (${likes.length})
-      </button>
-
-      <button id="detailBmBtn" class="btn-secondary" style="background:${isBookmarked ? '#0f172a' : '#fff'}; color:${isBookmarked ? '#fff' : 'inherit'}; flex:1;">
-        <i class="${isBookmarked ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'}"></i> ${isBookmarked ? '保存済み' : '保存'}
-      </button>
-
-      <button id="setStartSpotBtn" class="btn-secondary" style="flex:1.2;">
-        <i class="fa-solid fa-route"></i> 出発地に設定
-      </button>
-
-      ${isOfficial ? `<button id="adminPickupBtn" class="btn-admin-pickup"><i class="fa-solid fa-star"></i> ピックアップに登録</button>` : ''}
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      ${isOfficial ? `<button id="adminPickupBtn" class="btn-admin-pickup"><i class="fa-solid fa-star"></i> ピックアップ</button>` : ''}
       ${isMine ? `<button id="openEditPostBtn" class="btn-secondary" style="color:var(--primary-accent);"><i class="fa-regular fa-pen-to-square"></i> 編集</button>` : ''}
-      ${!isMine ? `<button id="reportPostBtn" class="btn-report" title="通報"><i class="fa-regular fa-flag"></i> 通報</button>` : ''}
       ${isMine ? `<button id="deletePostBtn" class="btn-danger"><i class="fa-regular fa-trash-can"></i> 削除</button>` : ''}
-    </div>
-
-    <!-- コメント＆スレッド返信欄 -->
-    <div class="comment-section">
-      <h3 class="sub-heading" style="margin-top:0;"><i class="fa-regular fa-comment"></i> コメント (${postComments.length})</h3>
-      
-      <div id="replyingIndicatorBox"></div>
-
-      <div class="comment-list" id="detailCommentList">
-        ${renderCommentTreeHtml(rootComments, postComments)}
-      </div>
-      <div class="comment-input-row">
-        <input type="text" id="newCommentInput" placeholder="コメントを入力...">
-        <button id="addCommentBtn" class="btn-primary" style="width:auto; padding:8px 16px; font-size:12px;">送信</button>
-      </div>
+      ${!isMine ? `<button id="reportPostBtn" class="btn-report" title="通報"><i class="fa-regular fa-flag"></i></button>` : ''}
     </div>
   `;
 
   document.getElementById("detailModal").classList.add("show");
 
-  // シェア
-  const baseUrl = window.location.origin + window.location.pathname;
-  const postUrl = `${baseUrl}?post=${encodeURIComponent(item.id)}`;
-  const shareText = `【OKATRI】岡山のスポット「${item.title}」(@${item.area})`;
-
-  safeOnClick("sharePostXBtn", () => {
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(postUrl)}&hashtags=オカトリ,岡山旅行`, '_blank');
+  // いいねしたユーザー一覧
+  safeOnClick("detailLikeCountBtn", () => {
+    if (likes.length === 0) { alert("まだいいねはありません"); return; }
+    openUserListModal("いいねしたユーザー", likes);
   });
 
-  safeOnClick("sharePostLineBtn", () => {
-    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(`${shareText}\n${postUrl}`)}`, '_blank');
-  });
+  // ★ 吹き出しボタンを押したら下からコメントシートを開く
+  safeOnClick("openCommentsSheetBtn", () => openCommentsModal(item));
 
-  safeOnClick("sharePostCopyBtn", () => {
-    if (navigator.clipboard) navigator.clipboard.writeText(postUrl);
-    alert(`投稿の専用URLをコピーしました！\n${postUrl}`);
+  // ★ 紙飛行機ボタンを押したらOSの「リンクを共有」画面を直接起動
+  safeOnClick("sharePostPlaneBtn", async () => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const postUrl = `${baseUrl}?post=${encodeURIComponent(item.id)}`;
+    const shareData = {
+      title: `【OKATRI】${item.title}`,
+      text: `岡山のスポット「${item.title}」(@${item.area}) #オカトリ #岡山旅行`,
+      url: postUrl
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        // キャンセル時は何もしない
+      }
+    } else {
+      if (navigator.clipboard) navigator.clipboard.writeText(postUrl);
+      alert(`投稿のURLをコピーしました！\n${postUrl}`);
+    }
   });
 
   safeOnClick("openEditPostBtn", () => openEditPostModal(item));
@@ -1762,11 +1774,9 @@ function openDetail(item) {
       lng: item.lng || 133.9350,
       image_url: item.image_url
     };
-
     pickupsData.unshift(newPickup);
     renderPickups();
     updateMapMarkers();
-
     if (db) await db.from("pickups").insert([newPickup]);
     alert(`「${item.title}」をエリアマップのピックアップに追加しました！`);
   });
@@ -1775,7 +1785,6 @@ function openDetail(item) {
     if (!currentUser) { alert("ログインが必要です"); return; }
     const reason = prompt("通報の理由を入力してください:");
     if (!reason || reason.trim() === "") return;
-
     if (db) {
       await db.from("reports").insert([{
         id: generateUniqueId("rep"),
@@ -1814,17 +1823,47 @@ function openDetail(item) {
     document.getElementById("detailModal").classList.remove("show");
     if (db) await db.from("posts").delete().eq("id", item.id);
   });
+}
 
-  // コメント送信（返信・スレッド・通知対応）
+// ★ 下から出るコメント専用シートの制御関数
+function openCommentsModal(post) {
+  const modal = document.getElementById("postCommentsModal");
+  const list = document.getElementById("postCommentsModalList");
+  const myAv = document.getElementById("commentBarMyAvatar");
+  const input = document.getElementById("newCommentInput");
+  if (!modal || !list) return;
+
+  if (myAv) {
+    myAv.src = (currentUser && currentUser.avatar) ? currentUser.avatar : 'https://via.placeholder.com/32';
+  }
+
+  if (input) {
+    input.placeholder = `${post.nickname || '投稿者'}へのコメントを追加...`;
+    input.value = "";
+  }
+  currentReplyingCommentId = null;
+  cancelReplyTarget();
+
+  function renderList() {
+    const postComments = commentsData.filter(c => c.post_id === post.id);
+    const rootComments = postComments.filter(c => !c.parent_id);
+    list.innerHTML = renderCommentTreeHtml(rootComments, postComments, post.user_id);
+    const cCountEl = document.getElementById("detailCommentCount");
+    if (cCountEl) cCountEl.textContent = postComments.length;
+  }
+
+  renderList();
+  modal.classList.add("show");
+
+  safeOnClick("closeCommentsModalBtn", () => modal.classList.remove("show"));
+
   safeOnClick("addCommentBtn", async () => {
-    const input = document.getElementById("newCommentInput");
-    if (!input) return;
-    const val = input.value.trim();
+    const val = (document.getElementById("newCommentInput").value || "").trim();
     if (!val) return;
 
     const newCmt = {
       id: generateUniqueId("cmt"),
-      post_id: item.id,
+      post_id: post.id,
       user_id: currentUser ? currentUser.userId : "guest",
       nickname: currentUser ? currentUser.nickname : "匿名",
       comment: val,
@@ -1833,41 +1872,133 @@ function openDetail(item) {
 
     commentsData.push(newCmt);
     currentReplyingCommentId = null;
-    input.value = "";
-    openDetail(item);
+    cancelReplyTarget();
+    document.getElementById("newCommentInput").value = "";
+    renderList();
 
     if (db) {
       await db.from("comments").insert([newCmt]);
-      // 投稿者に通知を送信
-      sendNotification(item.user_id, 'comment', item.id, item.title);
+      sendNotification(post.user_id, 'comment', post.id, post.title);
     }
   });
 }
 
-// スレッドコメントHTML生成
-function renderCommentTreeHtml(rootComments, allComments) {
-  if (rootComments.length === 0) return '<div style="font-size:12px; color:#94a3b8;">まだコメントはありません</div>';
+// ★ 画像1枚目風：WEAR式コメントツリーHTML生成
+function renderCommentTreeHtml(rootComments, allComments, postAuthorUserId) {
+  if (rootComments.length === 0) {
+    return '<div style="font-size:12px; color:#94a3b8; text-align:center; padding:20px 0;">まだコメントはありません</div>';
+  }
 
   return rootComments.map(c => {
+    const authorUser = allUsersData.find(u => u.user_id === c.user_id);
+    const avSrc = authorUser && authorUser.avatar ? authorUser.avatar : 'https://via.placeholder.com/38';
+    const isAuthor = c.user_id === postAuthorUserId;
+
+    // 返信コメント一覧
     const replies = allComments.filter(r => r.parent_id === c.id);
-    const repliesHtml = replies.map(r => `
-      <div class="comment-item reply">
-        <span class="comment-author">${r.nickname} (@${r.user_id})</span>
-        <div style="margin-top:2px;">${r.comment}</div>
-      </div>
-    `).join('');
+    const repliesHtml = replies.map(r => {
+      const rUser = allUsersData.find(u => u.user_id === r.user_id);
+      const rAvSrc = rUser && rUser.avatar ? rUser.avatar : 'https://via.placeholder.com/38';
+      const rIsAuthor = r.user_id === postAuthorUserId;
+
+      return `
+        <div class="wear-comment-item" style="margin-left: 36px;">
+          <img src="${rAvSrc}" class="wear-comment-avatar" onerror="this.src='https://via.placeholder.com/38'">
+          <div class="wear-comment-body">
+            <div class="wear-comment-header">
+              <span class="wear-comment-author">${r.nickname}</span>
+              ${rIsAuthor ? '<span class="wear-author-tag">・投稿者</span>' : ''}
+            </div>
+            <div class="wear-comment-text">${r.comment}</div>
+          </div>
+          <div class="wear-comment-like"><i class="fa-regular fa-heart"></i></div>
+        </div>
+      `;
+    }).join('');
 
     return `
-      <div class="comment-item">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span class="comment-author">${c.nickname} (@${c.user_id})</span>
-          <span class="reply-badge" onclick="setReplyTarget('${c.id}', '${c.nickname}')"><i class="fa-solid fa-reply"></i> 返信</span>
+      <div class="wear-comment-item">
+        <img src="${avSrc}" class="wear-comment-avatar" onerror="this.src='https://via.placeholder.com/38'">
+        <div class="wear-comment-body">
+          <div class="wear-comment-header">
+            <span class="wear-comment-author">${c.nickname}</span>
+            ${isAuthor ? '<span class="wear-author-tag">・投稿者</span>' : ''}
+          </div>
+          <div class="wear-comment-text">${c.comment}</div>
+          <div class="wear-comment-actions">
+            <span class="wear-reply-link" onclick="setReplyTarget('${c.id}', '${c.nickname}')">返信</span>
+          </div>
         </div>
-        <div style="margin-top:2px;">${c.comment}</div>
+        <div class="wear-comment-like"><i class="fa-regular fa-heart"></i></div>
       </div>
       ${repliesHtml}
     `;
   }).join('');
+}
+
+// ====================================================
+// ★ コメント専用ボトムシート表示＆送信処理
+// ====================================================
+function openCommentsModal(post) {
+  const modal = document.getElementById("postCommentsModal");
+  const list = document.getElementById("postCommentsModalList");
+  const myAv = document.getElementById("commentBarMyAvatar");
+  const input = document.getElementById("newCommentInput");
+  if (!modal || !list) return;
+
+  // 自分のアイコンをセット
+  if (myAv) {
+    myAv.src = (currentUser && currentUser.avatar) ? currentUser.avatar : 'https://via.placeholder.com/32';
+  }
+
+  // プレースホルダーを更新
+  if (input) {
+    input.placeholder = `${post.nickname || '投稿者'}へのコメントを追加...`;
+    input.value = "";
+  }
+  currentReplyingCommentId = null;
+  cancelReplyTarget();
+
+  function renderList() {
+    const postComments = commentsData.filter(c => c.post_id === post.id);
+    const rootComments = postComments.filter(c => !c.parent_id);
+    list.innerHTML = renderCommentTreeHtml(rootComments, postComments, post.user_id);
+    // 詳細画面側の件数バッジも更新
+    const cCountEl = document.getElementById("detailCommentCount");
+    if (cCountEl) cCountEl.textContent = postComments.length;
+  }
+
+  renderList();
+  modal.classList.add("show");
+
+  // 閉じるボタン
+  safeOnClick("closeCommentsModalBtn", () => modal.classList.remove("show"));
+
+  // コメント送信処理
+  safeOnClick("addCommentBtn", async () => {
+    const val = (document.getElementById("newCommentInput").value || "").trim();
+    if (!val) return;
+
+    const newCmt = {
+      id: generateUniqueId("cmt"),
+      post_id: post.id,
+      user_id: currentUser ? currentUser.userId : "guest",
+      nickname: currentUser ? currentUser.nickname : "匿名",
+      comment: val,
+      parent_id: currentReplyingCommentId
+    };
+
+    commentsData.push(newCmt);
+    currentReplyingCommentId = null;
+    cancelReplyTarget();
+    document.getElementById("newCommentInput").value = "";
+    renderList();
+
+    if (db) {
+      await db.from("comments").insert([newCmt]);
+      sendNotification(post.user_id, 'comment', post.id, post.title);
+    }
+  });
 }
 
 window.setReplyTarget = function(commentId, nickname) {

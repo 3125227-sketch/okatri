@@ -1277,3 +1277,219 @@ body {
   color: #fff;
   border-color: #0f172a;
 }
+/* ==========================================
+   【修正】切り替えバーの固定（スクロールしても一番上にとどまる）
+========================================== */
+.feed-tabs-container {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bg-page); /* スクロール時に下が透けないように背景色を指定 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 18px;
+  padding: 10px 0 0;
+}
+
+/* ==========================================
+   【修正】スマホ版 相手プロフィールも画面の一番上まで全画面表示
+========================================== */
+@media (max-width: 767px) {
+  #detailModal .modal-sheet,
+  #userListModal .modal-sheet,
+  #userProfileModal .modal-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    top: 0 !important;
+    padding: env(safe-area-inset-top, 16px) 16px 85px 16px !important;
+  }
+}
+
+/* ==========================================
+   画像2枚目風：インスタ/WEAR式アクションバー
+========================================== */
+.insta-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+.insta-action-left, .insta-action-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.insta-icon-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.1s ease;
+}
+.insta-icon-btn:active {
+  transform: scale(0.9);
+}
+.insta-icon-btn.liked {
+  color: #f02868;
+}
+.insta-icon-btn.bookmarked {
+  color: #0f172a;
+}
+.action-count-clickable {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-left: -8px;
+  padding: 2px 4px;
+}
+.action-count-clickable:hover {
+  text-decoration: underline;
+}
+.action-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-left: -8px;
+}
+
+/* ==========================================
+   画像1枚目風：WEAR式コメントデザイン
+========================================== */
+.wear-comment-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f8fafc;
+  position: relative;
+}
+.wear-comment-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #e2e8f0;
+}
+.wear-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+.wear-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.wear-comment-author {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.wear-author-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.wear-comment-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.wear-comment-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.wear-reply-link {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 600;
+}
+.wear-comment-like {
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  align-self: flex-start;
+  padding: 4px;
+}
+
+/* WEAR風 コメント入力バー */
+.wear-comment-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.wear-my-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.wear-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.wear-input-wrap input {
+  width: 100%;
+  background: #f1f5f9;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 12px;
+  outline: none;
+}
+.wear-input-wrap input:focus {
+  background: #fff;
+  border-color: var(--primary-accent);
+}
+.wear-send-btn {
+  background: var(--primary-accent);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+/* ==========================================
+   WEAR風 コメント専用ボトムシート
+========================================== */
+.wear-comments-sheet {
+  border-radius: 20px 20px 0 0 !important;
+  max-height: 75vh !important;
+  height: 75vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 10px 16px 20px 16px !important;
+  background: var(--bg-surface) !important;
+}
+.modal-drag-handle {
+  width: 40px;
+  height: 4px;
+  background: #cbd5e1;
+  border-radius: 2px;
+  margin: 0 auto 10px;
+  flex-shrink: 0;
+}
