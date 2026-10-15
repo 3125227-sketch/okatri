@@ -268,7 +268,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background: var(--bg-surface);
+  background: #ffffff;
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
@@ -304,7 +304,7 @@ body {
 }
 .drawer-item:hover { background: #fdf2f6; color: var(--primary-accent); }
 .d-icon { font-size: 15px; width: 18px; text-align: center; }
-.drawer-footer { border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-top: auto; }
+.drawer-footer { border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-top: 16px; }
 .drawer-auth-btn {
   width: 100%; padding: 10px; background: #fdf2f6; border: 1px solid #fbcfe0;
   border-radius: var(--radius-md); font-size: 12px; font-weight: 600; color: var(--primary-accent); cursor: pointer;
@@ -942,6 +942,7 @@ body {
 ========================================== */
 #userListModal {
   justify-content: flex-end;
+  z-index: 10050 !important; /* 投稿詳細画面(10000)よりも前面に表示 */
 }
 #userListModal .modal-sheet {
   display: flex;
@@ -1482,7 +1483,7 @@ body {
   height: 75vh !important;
   display: flex !important;
   flex-direction: column !important;
-  padding: 10px 16px 20px 16px !important;
+  padding: 10px 16px env(safe-area-inset-bottom, 8px) 16px !important;
   background: var(--bg-surface) !important;
 }
 .modal-drag-handle {
