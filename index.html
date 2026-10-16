@@ -35,7 +35,7 @@
 
     <nav class="sidebar-nav">
       <div class="sidebar-item active" data-tab="tabPosts"><i class="fa-solid fa-layer-group s-icon"></i> タイムライン</div>
-           <div class="sidebar-item" id="openNotifyModalBtn">
+           <div class="sidebar-item" data-tab="tabNotifications">
         <i class="fa-regular fa-bell s-icon"></i> 通知 
         <span class="notify-badge-count" id="sidebarNotifyCount" style="position:static; margin-left:6px; display:none;">0</span>
       </div>
@@ -69,6 +69,7 @@
 
     <nav class="drawer-nav">
       <div class="drawer-item" data-tab="tabPosts"><i class="fa-solid fa-layer-group d-icon"></i> ホーム</div>
+      <div class="drawer-item" data-tab="tabNotifications"><i class="fa-regular fa-bell d-icon"></i> 通知</div>
       <div class="drawer-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot d-icon"></i> エリアマップ</div>
       <div class="drawer-item" data-tab="tabRoutes"><i class="fa-solid fa-route d-icon"></i> ルート作成</div>
       <!-- mobileDrawer の drawer-nav に追加 -->
@@ -468,6 +469,32 @@
         <div class="pokedex-grid" id="pokedexGrid"></div>
       </section>
 
+      <!-- ★ 通知・お知らせ専用ページ -->
+      <section id="tabNotifications" class="tab-pane">
+        <div class="section-title-box">
+          <h2 class="section-heading">通知・お知らせ</h2>
+          <p class="section-desc">あなたへのアクティビティや公式からのお知らせ</p>
+        </div>
+
+        <div class="feed-tabs-container" style="margin-bottom:16px;">
+          <button class="feed-tab-underline active" id="notifyPageUserBtn">通知</button>
+          <button class="feed-tab-underline" id="notifyPageOfficialBtn">公式お知らせ</button>
+        </div>
+
+        <!-- ユーザー通知一覧 -->
+        <div id="notifyPageUserSection">
+          <div id="notifyPageListContainer">
+            <div class="empty-state">新しい通知はありません</div>
+          </div>
+        </div>
+
+        <!-- 公式お知らせ一覧 -->
+        <div id="notifyPageOfficialSection" style="display:none;">
+          <div id="notifyPageOfficialListContainer">
+            <div class="empty-state">お知らせを取得中...</div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- 【スマホ用】ボトムナビ -->
@@ -757,16 +784,6 @@
       <div class="form-group">
           <label>達成報酬バッジ <span class="required-badge">必須</span></label>
           <select id="rallyRewardBadgeSelect" required></select>
-        </div>
-        <!-- ↓ ここから2項目を追加 ↓ -->
-        <div class="form-group">
-          <label>スタンプの数（1〜4箇所）</label>
-          <select id="rallySpotCountSelect" class="form-control" onchange="updateRallySpotLimit()">
-            <option value="1">1箇所</option>
-            <option value="2" selected>2箇所</option>
-            <option value="3">3箇所</option>
-            <option value="4">4箇所</option>
-          </select>
         </div>
         <!-- 台紙画像（ファイル選択 or URL入力でSupabaseへ保存） -->
         <div class="form-group">

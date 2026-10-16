@@ -415,11 +415,15 @@ async function fetchNotifications() {
   }
 }
 
-function openNotificationsModal() {
-  if (!currentUser) { alert("ログインが必要です"); return; }
-  const container = document.getElementById("notifyListContainer");
+function renderNotificationsPage() {
+  const container = document.getElementById("notifyPageListContainer");
   if (!container) return;
   container.innerHTML = "";
+
+  if (!currentUser) {
+    container.innerHTML = `<div class="empty-state">ログインすると通知が表示されます</div>`;
+    return;
+  }
 
   if (notificationsData.length === 0) {
     container.innerHTML = `<div class="empty-state">新しい通知はありません</div>`;
@@ -454,12 +458,8 @@ function openNotificationsModal() {
         }
         if (n.post_id) {
           const p = postsData.find(x => x.id === n.post_id);
-          if (p) {
-            document.getElementById("notifyModal").classList.remove("show");
-            openDetail(p);
-          }
+          if (p) openDetail(p);
         } else if (n.type === 'follow') {
-          document.getElementById("notifyModal").classList.remove("show");
           openUserProfile(n.from_user_id, n.from_nickname);
         }
       };
@@ -467,8 +467,6 @@ function openNotificationsModal() {
       container.appendChild(item);
     });
   }
-
-  document.getElementById("notifyModal").classList.add("show");
 }
 
 // ====================================================
@@ -516,6 +514,9 @@ function setupNavigation() {
       }
       if (tabId === "tabNewsPage") renderAnnouncements();
       if (tabId === "tabAbout") renderAboutPage();
+      if (tabId === "tabNotifications") {
+        renderNotificationsPage();
+      }
     });
   });
 
@@ -528,8 +529,9 @@ function setupNavigation() {
     });
   }
 
-  safeOnClick("mobileNotifyBellBtn", openNotificationsModal);
-  safeOnClick("openNotifyModalBtn", openNotificationsModal);
+  safeOnClick("mobileNotifyBellBtn", () => {
+    document.querySelectorAll('[data-tab="tabNotifications"]').forEach(el => el.click());
+  });
   safeOnClick("closeNotifyModalBtn", () => document.getElementById("notifyModal").classList.remove("show"));
 
   safeOnClick("goNewsPageBtn", () => {
@@ -685,7 +687,7 @@ function renderAboutPage() {
 // 4. お知らせ欄
 // ====================================================
 function renderAnnouncements() {
-  const modalContainer = document.getElementById("announcementListModal") || document.getElementById("notifyOfficialSection");
+  const modalContainer = document.getElementById("notifyPageOfficialListContainer") || document.getElementById("announcementListModal") || document.getElementById("notifyOfficialSection");
   if (!modalContainer) return;
   modalContainer.innerHTML = "";
 
@@ -1763,6 +1765,17 @@ function openCreateRallyModal() {
           <input type="checkbox" id="rally_spot_${idx}" value="${p.id}" data-name="${p.title}" data-lat="${p.lat || 34.6618}" data-lng="${p.lng || 133.9350}" data-image="${imgUrl}">
           <label for="rally_spot_${idx}">${p.title} (@${p.area})</label>
         `;
+
+        // ★ 選択数最大4箇所制限を付与
+        const chk = div.querySelector("input");
+        chk.onchange = () => {
+          const checkedCount = document.querySelectorAll("#rallySpotsCheckboxList input:checked").length;
+          if (checkedCount > 4) {
+            chk.checked = false;
+            alert("スタンプラリーのスポットは最大4箇所まで選択可能です。");
+          }
+        };
+
         spotContainer.appendChild(div);
       });
     }
@@ -2763,24 +2776,6 @@ function setupEventListeners() {
     };
   }
 
-  // ★ 1〜4箇所選択制限用の関数
-  window.updateRallySpotLimit = function() {
-    const limitSelect = document.getElementById("rallySpotCountSelect");
-    if (!limitSelect) return;
-    const limit = parseInt(limitSelect.value, 10);
-    const checkboxes = document.querySelectorAll("#rallySpotsCheckboxList input[type='checkbox']");
-    
-    checkboxes.forEach(chk => {
-      chk.onchange = () => {
-        const checkedCount = document.querySelectorAll("#rallySpotsCheckboxList input:checked").length;
-        if (checkedCount > limit) {
-          chk.checked = false;
-          alert(`この台紙のスタンプ数は最大 ${limit} 箇所までです。`);
-        }
-      };
-    });
-  };
-
   // 投稿編集フォーム送信
   const editPostForm = document.getElementById("editPostForm");
   if (editPostForm) {
@@ -3549,67 +3544,34 @@ function setupEventListeners() {
     }
   }
 
+  // AIルート作成機能のセットアップ
   setupAiRouteFeature();
-}
-// ==========================================
-// 通知 ＆ 公式お知らせ モーダル切り替え処理
-// ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-  const notifyTabUserBtn = document.getElementById('notifyTabUserBtn');
-  const notifyTabOfficialBtn = document.getElementById('notifyTabOfficialBtn');
-  const notifyUserSection = document.getElementById('notifyUserSection');
-  const notifyOfficialSection = document.getElementById('notifyOfficialSection');
-  const notifyModal = document.getElementById('notifyModal');
 
-  // 「通知」タブをクリックした時
-  if (notifyTabUserBtn) {
-    notifyTabUserBtn.addEventListener('click', () => {
-      notifyTabUserBtn.classList.add('active');
-      notifyTabOfficialBtn.classList.remove('active');
-      notifyUserSection.style.display = 'block';
-      notifyOfficialSection.style.display = 'none';
-    });
-  }
-
-// 「公式お知らせ」タブをクリックした時
-  if (notifyTabOfficialBtn) {
-    notifyTabOfficialBtn.addEventListener('click', () => {
-      notifyTabOfficialBtn.classList.add('active');
-      notifyTabUserBtn.classList.remove('active');
-      notifyOfficialSection.style.display = 'block';
-      notifyUserSection.style.display = 'none';
-
-      // 公式お知らせを表示
-      if (typeof renderAnnouncements === 'function') {
-        renderAnnouncements();
-      }
-    });
-  }
-
-  // 通知ベル・ボタンを押してモーダルを開く処理
-  const openNotifyBtns = [
-    document.getElementById('openNotifyModalBtn'),  // PC用
-    document.getElementById('mobileNotifyBellBtn')  // スマホ用
-  ];
-
-  openNotifyBtns.forEach(btn => {
-    if (btn) {
-      btn.addEventListener('click', () => {
-        if (notifyModal) notifyModal.classList.add('show');
-        // 開いた時は「通知」タブをデフォルト表示にする
-        if (notifyTabUserBtn) notifyTabUserBtn.click();
-      });
-    }
+  // 通知ページ内の「通知」↔「公式お知らせ」タブ切り替え
+  safeOnClick("notifyPageUserBtn", () => {
+    const uBtn = document.getElementById("notifyPageUserBtn");
+    const oBtn = document.getElementById("notifyPageOfficialBtn");
+    const uSec = document.getElementById("notifyPageUserSection");
+    const oSec = document.getElementById("notifyPageOfficialSection");
+    if (uBtn) uBtn.classList.add("active");
+    if (oBtn) oBtn.classList.remove("active");
+    if (uSec) uSec.style.display = "block";
+    if (oSec) oSec.style.display = "none";
+    renderNotificationsPage();
   });
 
-  // モーダル閉じるボタン
-  const closeNotifyModalBtn = document.getElementById('closeNotifyModalBtn');
-  if (closeNotifyModalBtn) {
-    closeNotifyModalBtn.addEventListener('click', () => {
-      if (notifyModal) notifyModal.classList.remove('show');
-    });
-  }
-});
+  safeOnClick("notifyPageOfficialBtn", () => {
+    const uBtn = document.getElementById("notifyPageUserBtn");
+    const oBtn = document.getElementById("notifyPageOfficialBtn");
+    const uSec = document.getElementById("notifyPageUserSection");
+    const oSec = document.getElementById("notifyPageOfficialSection");
+    if (oBtn) oBtn.classList.add("active");
+    if (uBtn) uBtn.classList.remove("active");
+    if (oSec) oSec.style.display = "block";
+    if (uSec) uSec.style.display = "none";
+    renderAnnouncements();
+  });
+} // ← setupEventListeners() 関数の正しい閉じカッコ
 
 // アプリ起動
 initApp();
