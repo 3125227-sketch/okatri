@@ -61,56 +61,50 @@ function isInsideOkayama(lat, lng, address) {
 async function geocodeAddress(address) {
   if (!address || address.trim() === "") return null;
 
-  // ① 住所文字列のクレンジング（整形）
+  // ① 住所の整形（郵便番号の削除・全角数字ハイフンの半角化）
   let clean = address.trim();
-
-  // 郵便番号記号「〒」や「〒700-0024」「700-0024」を自動削除
   clean = clean.replace(/〒?\s*\d{3}-\d{4}/g, "").replace(/〒/g, "").trim();
-
-  // 全角英数字を半角に変換（例: １−１ → 1-1）
-  clean = clean.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
-    return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-  });
-
-  // 全角ハイフン・長音記号等を半角ハイフンに統一
+  clean = clean.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
   clean = clean.replace(/[－―ー–—〜]/g, "-").trim();
 
-  // ② 段階的に検索（1. 精密住所 ➔ 2. 建物名等を除いた住所）
-  // 例：「岡山県岡山市北区駅元町1-1」でヒットしない場合、「岡山市北区駅元町1-1」で再試行
+  // ② 番地を取り除いた「町名レベル」の文字列を作成（例: 岡山市北区駅元町1-1 -> 岡山市北区駅元町）
+  const noNumbers = clean.replace(/[\d-ー〜−]+.*$/, "").trim();
+
+  // 検索クエリのフォールバック優先順位
   const candidateQueries = [];
-
-  // クレンジング済みの住所
-  candidateQueries.push(clean);
-
-  // 「岡山県」が入っていなければ頭に補完
+  candidateQueries.push(clean); // 1. 入力されたままの住所
+  if (noNumbers && noNumbers !== clean && noNumbers.length >= 3) {
+    candidateQueries.push(noNumbers); // 2. 番地を除いた町名レベル
+  }
   if (!clean.includes("岡山")) {
     candidateQueries.push(`岡山県 ${clean}`);
-  } else {
-    // 「岡山県」を取り除いた市区町村以下の文字列も試す
-    candidateQueries.push(clean.replace(/^岡山県\s*/, ""));
+    if (noNumbers) candidateQueries.push(`岡山県 ${noNumbers}`);
   }
+
+  const viewbox = "133.30,35.38,134.45,34.25";
 
   for (const q of candidateQueries) {
     if (!q || q.length < 2) continue;
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=jp&limit=5`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&bounded=1&viewbox=${viewbox}&countrycodes=jp&limit=5`;
       const res = await fetch(url);
       const data = await res.json();
 
       if (data && data.length > 0) {
-        // 広域の「岡山県」全体（type: state）以外の具体的スポットを取得
-        const validMatch = data.find(item => {
+        // 「北区」や「岡山市」全体の広域中心点 (administrative) ではなく、町名やスポット単位の結果を優先採用
+        const match = data.find(item => {
           const lat = parseFloat(item.lat);
           const lng = parseFloat(item.lon);
-          const isOkayamaRange = (lat >= 34.2 && lat <= 35.4 && lng >= 133.2 && lng <= 134.5);
-          const isNotState = item.type !== "state" && item.addresstype !== "state";
-          return isOkayamaRange && isNotState;
+          const inOkayama = (lat >= 34.2 && lat <= 35.4 && lng >= 133.2 && lng <= 134.5);
+          // 行政区全体・都道府県全体などの大雑把なヒットを撥ねる
+          const isTooBroad = (item.type === "administrative" || item.addresstype === "administrative" || item.type === "state");
+          return inOkayama && !isTooBroad;
         });
 
-        if (validMatch) {
+        if (match) {
           return {
-            lat: parseFloat(validMatch.lat),
-            lng: parseFloat(validMatch.lon)
+            lat: parseFloat(match.lat),
+            lng: parseFloat(match.lon)
           };
         }
       }
