@@ -60,40 +60,65 @@ function isInsideOkayama(lat, lng, address) {
 
 async function geocodeAddress(address) {
   if (!address || address.trim() === "") return null;
-  const raw = address.trim();
 
-  // 1. そのまま検索, 2. 岡山県を付与して検索の2パターンを試行
-  const queries = [
-    raw,
-    raw.includes("岡山") ? raw : `岡山県 ${raw}`
-  ];
+  // ① 住所文字列のクレンジング（整形）
+  let clean = address.trim();
 
-  // 岡山県の地理的範囲（viewbox）に絞り込んで検索精度を向上
-  const viewbox = "133.30,35.38,134.45,34.25";
+  // 郵便番号記号「〒」や「〒700-0024」「700-0024」を自動削除
+  clean = clean.replace(/〒?\s*\d{3}-\d{4}/g, "").replace(/〒/g, "").trim();
 
-  for (const q of queries) {
+  // 全角英数字を半角に変換（例: １−１ → 1-1）
+  clean = clean.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
+    return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+  });
+
+  // 全角ハイフン・長音記号等を半角ハイフンに統一
+  clean = clean.replace(/[－―ー–—〜]/g, "-").trim();
+
+  // ② 段階的に検索（1. 精密住所 ➔ 2. 建物名等を除いた住所）
+  // 例：「岡山県岡山市北区駅元町1-1」でヒットしない場合、「岡山市北区駅元町1-1」で再試行
+  const candidateQueries = [];
+
+  // クレンジング済みの住所
+  candidateQueries.push(clean);
+
+  // 「岡山県」が入っていなければ頭に補完
+  if (!clean.includes("岡山")) {
+    candidateQueries.push(`岡山県 ${clean}`);
+  } else {
+    // 「岡山県」を取り除いた市区町村以下の文字列も試す
+    candidateQueries.push(clean.replace(/^岡山県\s*/, ""));
+  }
+
+  for (const q of candidateQueries) {
+    if (!q || q.length < 2) continue;
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&bounded=1&viewbox=${viewbox}&countrycodes=jp&limit=3`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=jp&limit=5`;
       const res = await fetch(url);
       const data = await res.json();
 
       if (data && data.length > 0) {
-        // 「岡山県」全体（state）などの広域すぎるレスポンスを弾く
-        const match = data.find(item => item.type !== "state" && item.addresstype !== "state") || data[0];
-        
-        if (match && match.type !== "state" && match.addresstype !== "state") {
-          const lat = parseFloat(match.lat);
-          const lng = parseFloat(match.lon);
-          // 岡山県の範囲内の緯度経度かチェック
-          if (lat >= 34.2 && lat <= 35.4 && lng >= 133.2 && lng <= 134.5) {
-            return { lat, lng };
-          }
+        // 広域の「岡山県」全体（type: state）以外の具体的スポットを取得
+        const validMatch = data.find(item => {
+          const lat = parseFloat(item.lat);
+          const lng = parseFloat(item.lon);
+          const isOkayamaRange = (lat >= 34.2 && lat <= 35.4 && lng >= 133.2 && lng <= 134.5);
+          const isNotState = item.type !== "state" && item.addresstype !== "state";
+          return isOkayamaRange && isNotState;
+        });
+
+        if (validMatch) {
+          return {
+            lat: parseFloat(validMatch.lat),
+            lng: parseFloat(validMatch.lon)
+          };
         }
       }
     } catch (e) {
-      console.warn("ジオコーディングエラー:", e);
+      console.warn("住所検索エラー:", e);
     }
   }
+
   return null;
 }
 
