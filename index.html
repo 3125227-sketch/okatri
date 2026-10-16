@@ -41,7 +41,6 @@
       </div>
       <div class="sidebar-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot s-icon"></i> エリアマップ</div>
       <div class="sidebar-item" data-tab="tabRoutes"><i class="fa-solid fa-route s-icon"></i> ルート作成</div>
-      <div class="sidebar-item" data-tab="tabNewsPage"><i class="fa-regular fa-bell s-icon"></i> お知らせ</div>
       <!-- サイドバー & ドロワーの nav に追加 -->
 <div class="sidebar-item" data-tab="tabAchievements"><i class="fa-solid fa-award s-icon"></i> アチーブメント図鑑</div>
       <div class="sidebar-item" data-tab="tabAccounts"><i class="fa-solid fa-magnifying-glass s-icon"></i> ユーザー検索</div>
@@ -72,7 +71,6 @@
       <div class="drawer-item" data-tab="tabPosts"><i class="fa-solid fa-layer-group d-icon"></i> ホーム</div>
       <div class="drawer-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot d-icon"></i> エリアマップ</div>
       <div class="drawer-item" data-tab="tabRoutes"><i class="fa-solid fa-route d-icon"></i> ルート作成</div>
-      <div class="drawer-item" data-tab="tabNewsPage"><i class="fa-regular fa-bell d-icon"></i> お知らせ</div>
       <!-- mobileDrawer の drawer-nav に追加 -->
 <div class="drawer-item" data-tab="tabAchievements"><i class="fa-solid fa-award d-icon"></i> アチーブメント図鑑</div>
       <div class="drawer-item" data-tab="tabAccounts"><i class="fa-solid fa-magnifying-glass d-icon"></i> ユーザー検索</div>
@@ -111,17 +109,6 @@
           <h1 class="welcome-text">もっと気軽に、もっと楽しく、もっと岡山へ。</h1>
           <p class="hero-sub">地元のリアルな声を届けるオープンコミュニティ</p>
           <button class="btn-primary mobile-top-post-btn" id="topPostBtn"><i class="fa-solid fa-images"></i> アルバムから投稿</button>
-        </div>
-
-        <!-- お知らせバナーカード -->
-        <div class="news-section">
-          <div class="news-header">
-            <span class="news-title"><i class="fa-regular fa-bell"></i> 最新のお知らせ</span>
-            <button class="news-more-btn" id="goNewsPageBtn">一覧へ <i class="fa-solid fa-chevron-right"></i></button>
-          </div>
-          <div class="news-list" id="announcementListHome">
-            <div class="empty-state">お知らせを取得中...</div>
-          </div>
         </div>
 
         <!-- ★ 追加: 昼版（3:00-17:59）/ 夜版（18:00-2:59）切り替えバー -->
@@ -272,17 +259,6 @@
               <div style="font-size:12px; color:#64748b; margin-top:4px;">条件を設定して生成ボタンを押してください</div>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- 4. お知らせ一覧専用タブ -->
-      <section id="tabNewsPage" class="tab-pane">
-        <div class="section-title-box">
-          <h2 class="section-heading">お知らせ一覧</h2>
-          <p class="section-desc">プラットフォームの最新情報・機能追加のお知らせ</p>
-        </div>
-        <div class="news-page-container" id="announcementListFull">
-          <div class="empty-state">お知らせを取得中...</div>
         </div>
       </section>
 
@@ -912,15 +888,32 @@
     </form>
   </div>
 </div>
-  <!-- 通知一覧モーダル -->
+<!-- 通知・お知らせ一覧モーダル -->
 <div class="modal-backdrop" id="notifyModal">
   <div class="modal-sheet">
     <div class="modal-header">
-      <h2>お知らせ・通知</h2>
+      <h2>通知・お知らせ</h2>
       <button class="close-btn" id="closeNotifyModalBtn"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div id="notifyListContainer" style="max-height:60vh; overflow-y:auto;">
-      <div class="empty-state">新しい通知はありません</div>
+
+    <!-- ホーム画面風 アンダーライン切り替えタブ -->
+    <div class="feed-tabs-container" style="margin-bottom:12px; padding-top:0; border-bottom:1px solid var(--border-subtle); sticky: static;">
+      <button class="feed-tab-underline active" id="notifyTabUserBtn">通知</button>
+      <button class="feed-tab-underline" id="notifyTabOfficialBtn">公式お知らせ</button>
+    </div>
+
+    <!-- 1. ユーザー通知一覧（いいね・コメント・フォロー等） -->
+    <div id="notifyUserSection" style="max-height:60vh; overflow-y:auto;">
+      <div id="notifyListContainer">
+        <div class="empty-state">新しい通知はありません</div>
+      </div>
+    </div>
+
+    <!-- 2. 公式お知らせ一覧 -->
+    <div id="notifyOfficialSection" style="max-height:60vh; overflow-y:auto; display:none;">
+      <div id="announcementListModal">
+        <div class="empty-state">お知らせを取得中...</div>
+      </div>
     </div>
   </div>
 </div>

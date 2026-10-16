@@ -96,6 +96,7 @@ let userCurrentLocationMarker = null;
 // 複数画像ファイル管理
 let currentUploadedFiles = [];
 let currentUploadedImagesBase64 = [];
+let currentUploadedBase64 = "";
 let currentAvatarBase64 = "";
 let currentLatitude = 34.6618;
 let currentLongitude = 133.9350;
@@ -610,30 +611,14 @@ function renderAboutPage() {
 // 4. お知らせ欄
 // ====================================================
 function renderAnnouncements() {
-  const homeContainer = document.getElementById("announcementListHome");
-  const fullContainer = document.getElementById("announcementListFull");
-
-  if (homeContainer) homeContainer.innerHTML = "";
-  if (fullContainer) fullContainer.innerHTML = "";
+  const modalContainer = document.getElementById("announcementListModal");
+  if (!modalContainer) return;
+  modalContainer.innerHTML = "";
 
   if (!announcementsData || announcementsData.length === 0) {
-    if (homeContainer) homeContainer.innerHTML = `<div style="font-size:12px; color:#94a3b8; padding:8px 0;">現在新しいお知らせはありません</div>`;
-    if (fullContainer) fullContainer.innerHTML = `<div class="empty-state">現在お知らせはありません</div>`;
+    modalContainer.innerHTML = `<div class="empty-state">現在お知らせはありません</div>`;
     return;
   }
-
-  announcementsData.slice(0, 3).forEach(item => {
-    const div = document.createElement("div");
-    div.className = "news-item";
-    div.style.cursor = "pointer";
-    div.innerHTML = `
-      <span class="news-badge">${item.badge || 'INFO'}</span>
-      <span class="news-item-title">${item.title || item.sub_text}</span>
-      <i class="fa-solid fa-chevron-right" style="font-size:10px; color:#94a3b8;"></i>
-    `;
-    div.onclick = () => openNewsDetail(item);
-    if (homeContainer) homeContainer.appendChild(div);
-  });
 
   announcementsData.forEach(item => {
     const card = document.createElement("div");
@@ -650,7 +635,7 @@ function renderAnnouncements() {
       <p style="font-size:12px; color:var(--text-secondary); line-height:1.5; margin:0;">${item.sub_text || ''}</p>
     `;
     card.onclick = () => openNewsDetail(item);
-    if (fullContainer) fullContainer.appendChild(card);
+    modalContainer.appendChild(card);
   });
 }
 
@@ -1822,64 +1807,6 @@ function openDetail(item) {
     updateMapMarkers();
     document.getElementById("detailModal").classList.remove("show");
     if (db) await db.from("posts").delete().eq("id", item.id);
-  });
-}
-
-// ★ 下から出るコメント専用シートの制御関数
-function openCommentsModal(post) {
-  const modal = document.getElementById("postCommentsModal");
-  const list = document.getElementById("postCommentsModalList");
-  const myAv = document.getElementById("commentBarMyAvatar");
-  const input = document.getElementById("newCommentInput");
-  if (!modal || !list) return;
-
-  if (myAv) {
-    myAv.src = (currentUser && currentUser.avatar) ? currentUser.avatar : 'https://via.placeholder.com/32';
-  }
-
-  if (input) {
-    input.placeholder = `${post.nickname || '投稿者'}へのコメントを追加...`;
-    input.value = "";
-  }
-  currentReplyingCommentId = null;
-  cancelReplyTarget();
-
-  function renderList() {
-    const postComments = commentsData.filter(c => c.post_id === post.id);
-    const rootComments = postComments.filter(c => !c.parent_id);
-    list.innerHTML = renderCommentTreeHtml(rootComments, postComments, post.user_id);
-    const cCountEl = document.getElementById("detailCommentCount");
-    if (cCountEl) cCountEl.textContent = postComments.length;
-  }
-
-  renderList();
-  modal.classList.add("show");
-
-  safeOnClick("closeCommentsModalBtn", () => modal.classList.remove("show"));
-
-  safeOnClick("addCommentBtn", async () => {
-    const val = (document.getElementById("newCommentInput").value || "").trim();
-    if (!val) return;
-
-    const newCmt = {
-      id: generateUniqueId("cmt"),
-      post_id: post.id,
-      user_id: currentUser ? currentUser.userId : "guest",
-      nickname: currentUser ? currentUser.nickname : "匿名",
-      comment: val,
-      parent_id: currentReplyingCommentId
-    };
-
-    commentsData.push(newCmt);
-    currentReplyingCommentId = null;
-    cancelReplyTarget();
-    document.getElementById("newCommentInput").value = "";
-    renderList();
-
-    if (db) {
-      await db.from("comments").insert([newCmt]);
-      sendNotification(post.user_id, 'comment', post.id, post.title);
-    }
   });
 }
 
@@ -3347,6 +3274,65 @@ function setupEventListeners() {
 
   setupAiRouteFeature();
 }
+// ==========================================
+// 通知 ＆ 公式お知らせ モーダル切り替え処理
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+  const notifyTabUserBtn = document.getElementById('notifyTabUserBtn');
+  const notifyTabOfficialBtn = document.getElementById('notifyTabOfficialBtn');
+  const notifyUserSection = document.getElementById('notifyUserSection');
+  const notifyOfficialSection = document.getElementById('notifyOfficialSection');
+  const notifyModal = document.getElementById('notifyModal');
+
+  // 「通知」タブをクリックした時
+  if (notifyTabUserBtn) {
+    notifyTabUserBtn.addEventListener('click', () => {
+      notifyTabUserBtn.classList.add('active');
+      notifyTabOfficialBtn.classList.remove('active');
+      notifyUserSection.style.display = 'block';
+      notifyOfficialSection.style.display = 'none';
+    });
+  }
+
+// 「公式お知らせ」タブをクリックした時
+  if (notifyTabOfficialBtn) {
+    notifyTabOfficialBtn.addEventListener('click', () => {
+      notifyTabOfficialBtn.classList.add('active');
+      notifyTabUserBtn.classList.remove('active');
+      notifyOfficialSection.style.display = 'block';
+      notifyUserSection.style.display = 'none';
+
+      // 公式お知らせを表示
+      if (typeof renderAnnouncements === 'function') {
+        renderAnnouncements();
+      }
+    });
+  }
+
+  // 通知ベル・ボタンを押してモーダルを開く処理
+  const openNotifyBtns = [
+    document.getElementById('openNotifyModalBtn'),  // PC用
+    document.getElementById('mobileNotifyBellBtn')  // スマホ用
+  ];
+
+  openNotifyBtns.forEach(btn => {
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (notifyModal) notifyModal.classList.add('show');
+        // 開いた時は「通知」タブをデフォルト表示にする
+        if (notifyTabUserBtn) notifyTabUserBtn.click();
+      });
+    }
+  });
+
+  // モーダル閉じるボタン
+  const closeNotifyModalBtn = document.getElementById('closeNotifyModalBtn');
+  if (closeNotifyModalBtn) {
+    closeNotifyModalBtn.addEventListener('click', () => {
+      if (notifyModal) notifyModal.classList.remove('show');
+    });
+  }
+});
 
 // アプリ起動
 initApp();
