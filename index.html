@@ -460,7 +460,7 @@
         </div>
 
         <!-- 開催中スタンプラリー -->
-        <h3 class="sub-heading" style="margin-top:0;"><i class="fa-solid fa-location-dot" style="color:var(--primary-accent);"></i> スタンプラリー</h3>
+        <h3 class="sub-heading" style="margin-top:0;"><i class="fa-solid fa-location-dot" style="color:var(--primary-accent);"></i> スタンプ帳一覧</h3>
         <div id="stampRallyContainer"></div>
 
         <!-- バッジ図鑑一覧 -->
@@ -755,13 +755,31 @@
         <textarea id="rallyDescInput" rows="2" placeholder="ラリーの概要や見どころ"></textarea>
       </div>
       <div class="form-group">
-        <label>達成報酬バッジ <span class="required-badge">必須</span></label>
-        <select id="rallyRewardBadgeSelect" required></select>
-      </div>
-      <div class="form-group">
-        <label>対象スポットを選択（投稿スポットから複数選択） <span class="required-badge">必須</span></label>
-        <div class="spot-select-list" id="rallySpotsCheckboxList"></div>
-      </div>
+          <label>達成報酬バッジ <span class="required-badge">必須</span></label>
+          <select id="rallyRewardBadgeSelect" required></select>
+        </div>
+        <!-- ↓ ここから2項目を追加 ↓ -->
+        <div class="form-group">
+          <label>スタンプの数（1〜4箇所）</label>
+          <select id="rallySpotCountSelect" class="form-control" onchange="updateRallySpotLimit()">
+            <option value="1">1箇所</option>
+            <option value="2" selected>2箇所</option>
+            <option value="3">3箇所</option>
+            <option value="4">4箇所</option>
+          </select>
+        </div>
+        <!-- 台紙画像（ファイル選択 or URL入力でSupabaseへ保存） -->
+        <div class="form-group">
+          <label>台紙画像ファイルを選択（Supabaseへ自動保存）</label>
+          <input type="file" id="rallyBgFileInput" accept="image/*" class="form-control">
+          <input type="text" id="rallyBgImageInput" class="form-control" placeholder="または画像URLを直接入力" style="margin-top:6px;">
+        </div>
+
+        <!-- スポット選択欄 -->
+        <div class="form-group">
+          <label>対象スポットを選択（投稿スポットから複数選択） <span class="required-badge">必須</span></label>
+          <div class="spot-select-list" id="rallySpotsCheckboxList"></div>
+        </div>
       <div class="form-actions">
         <button type="button" class="btn-secondary" id="cancelCreateRallyBtn">キャンセル</button>
         <button type="submit" class="btn-primary" id="submitCreateRallyBtn">ラリーを公開する</button>
@@ -945,6 +963,17 @@
   </div>
 </div>
 
+  <!-- ルート詳細モーダル -->
+<div class="modal-backdrop" id="routeDetailModal">
+  <div class="modal-sheet detail-sheet">
+    <div class="detail-top-nav">
+      <span class="detail-nav-title">ルート詳細</span>
+      <button class="close-btn" id="closeRouteDetailModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="detail-content" id="routeDetailContent"></div>
+  </div>
+</div>
+
 <!-- ↓↓↓ ★ ここに追加してください ↓↓↓ -->
 <div class="modal-backdrop" id="postCommentsModal">
   <div class="modal-sheet wear-comments-sheet">
@@ -970,6 +999,26 @@
   </div>
 </div>
 <!-- ↑↑↑ ここまで追加 ↑↑↑ -->
+  <!-- スタンプ帳詳細モーダル -->
+<div class="modal-backdrop" id="stampRallyDetailModal">
+  <div class="modal-sheet stamp-detail-content">
+    <div class="modal-header" style="justify-content:center; position:relative;">
+      <h2 id="stampDetailTitle" style="font-size:16px;">スタンプ帳詳細</h2>
+      <button class="close-btn" id="closeStampDetailModalBtn" style="position:absolute; right:0;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    
+    <!-- スタンプ台紙（Supabaseの画像背景） -->
+    <div id="stampBoardCanvas" class="stamp-board-canvas">
+      <div id="stampCirclesGrid" class="stamp-circles-grid"></div>
+    </div>
+
+    <p id="stampDetailDesc" style="font-size:12px; color:var(--text-secondary); margin:12px 0; text-align:center;"></p>
+    
+    <button id="detailCheckInBtn" class="btn-primary" style="width:100%; padding:10px;">
+      <i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン
+    </button>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>

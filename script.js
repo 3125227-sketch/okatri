@@ -87,6 +87,8 @@ let announcementsData = [];
 let aiMasterSpotsData = [];
 let masterBadgesData = [];
 let stampRalliesData = [];
+let sharedRoutesData = []; // ★ 追加
+let currentGeneratingRouteData = null; // ★ 追加
 let notificationsData = [];
 let appAboutData = null;
 let mapInstance = null;
@@ -135,7 +137,7 @@ async function initApp() {
     };
 
     try {
-      const [users, comments, pickups, news, aiSpots, badges, about, rallies] = await Promise.all([
+      const [users, comments, pickups, news, aiSpots, badges, about, rallies, routes] = await Promise.all([
         safeFetch(db.from("users_custom").select("*"), []),
         safeFetch(db.from("comments").select("*").order("created_at", { ascending: true }), []),
         safeFetch(db.from("pickups").select("*"), []),
@@ -143,7 +145,8 @@ async function initApp() {
         safeFetch(db.from("ai_master_spots").select("*"), []),
         safeFetch(db.from("achievements_master").select("*"), []),
         safeFetch(db.from("app_about").select("*").eq("id", "about_main").maybeSingle(), null),
-        safeFetch(db.from("stamp_rallies").select("*").eq("active", true), [])
+        safeFetch(db.from("stamp_rallies").select("*").eq("active", true), []),
+        safeFetch(db.from("shared_routes").select("*").order("created_at", { ascending: false }), []) // ★ Supabaseからルート一覧を取得
       ]);
 
       if (users) allUsersData = users;
@@ -166,6 +169,11 @@ async function initApp() {
         stampRalliesData = rallies.map(r => ({ ...r, spots: parseArray(r.spots) }));
       } else {
         stampRalliesData = [];
+      }
+
+      // ★ 共有ルートデータのセット
+      if (routes && routes.length > 0) {
+        sharedRoutesData = routes.map(r => ({ ...r, spots: parseArray(r.spots) }));
       }
 
       appAboutData = about;
@@ -292,7 +300,26 @@ async function uploadMultipleImagesToStorage(base64Array) {
   }
   return urls;
 }
+// 台紙画像をSupabase Storageに保存する関数
+async function uploadBgImageToStorage(file) {
+  if (!db || !file) return "";
+  try {
+    const fileName = `rally_bg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+    const filePath = `rallies/${fileName}`;
 
+    const { error: uploadError } = await db.storage
+      .from('post_images')
+      .upload(filePath, file, { contentType: file.type || 'image/jpeg', upsert: false });
+
+    if (!uploadError) {
+      const { data } = db.storage.from('post_images').getPublicUrl(filePath);
+      return data.publicUrl;
+    }
+  } catch (err) {
+    console.warn("台紙画像のアップロード失敗:", err);
+  }
+  return "";
+}
 // ====================================================
 // ★ 通知の送信・取得
 // ====================================================
@@ -962,8 +989,6 @@ function renderDiscoverPosts(items) {
 }
 
 // 共有ルート一覧の描画
-let sharedRoutesData = JSON.parse(localStorage.getItem("okatari_shared_routes")) || [];
-
 function renderDiscoverRoutes(query = "") {
   const list = document.getElementById("discoverRoutesList");
   if (!list) return;
@@ -986,15 +1011,79 @@ function renderDiscoverRoutes(query = "") {
   filtered.forEach(r => {
     const card = document.createElement("div");
     card.className = "clean-card-box";
+    card.style.cursor = "pointer";
     card.innerHTML = `
       <div style="font-size:11px; color:var(--primary-accent); font-weight:700;">${r.theme || '#モデルコース'}</div>
       <h3 style="font-size:15px; font-weight:700; margin:4px 0 6px;">${r.title}</h3>
-      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px;">${r.desc || ''}</p>
-      <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">投稿者: ${r.author}</div>
-      <a href="${r.mapUrl}" target="_blank" class="btn-secondary" style="font-size:11px; width:100%; text-decoration:none;"><i class="fa-solid fa-map-location-dot"></i> Googleマップでこのコースを開く</a>
+      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px; line-height:1.5;">${r.desc || ''}</p>
+      <div style="font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+        <span>投稿者: ${r.author || '匿名'}</span>
+        <span style="color:var(--primary-accent); font-weight:600;">詳細を見る <i class="fa-solid fa-chevron-right"></i></span>
+      </div>
     `;
+    card.onclick = () => openRouteDetail(r);
     list.appendChild(card);
   });
+}
+
+// ルート詳細モーダルを開く関数
+function openRouteDetail(route) {
+  const content = document.getElementById("routeDetailContent");
+  if (!content) return;
+
+  const spots = parseArray(route.spots);
+  const isMine = currentUser && currentUser.userId === route.user_id;
+
+  let spotsHtml = "";
+  if (spots.length > 0) {
+    spotsHtml = `
+      <ul class="timeline" style="margin-top:14px; margin-bottom:16px;">
+        ${spots.map(s => `
+          <li>
+            <b>${s.time ? s.time + ' ' : ''}${s.name}</b>${s.desc ? `<br><span style="color:var(--text-secondary); font-size:12px;">${s.desc}</span>` : ''}
+          </li>
+        `).join('')}
+      </ul>
+    `;
+  }
+
+  const mapUrl = route.map_url || route.mapUrl || '#';
+
+  content.innerHTML = `
+    <div style="font-size:11px; color:var(--primary-accent); font-weight:700; margin-bottom:4px;">${route.theme || '#モデルコース'}</div>
+    <h2 style="font-size:17px; font-weight:700; margin-bottom:8px;">${route.title}</h2>
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">作成者: @${route.author || '匿名'}</div>
+    <p style="font-size:13px; color:var(--text-primary); line-height:1.6; margin-bottom:16px;">${route.desc || '説明文はありません。'}</p>
+
+    <h3 class="sub-heading"><i class="fa-solid fa-route" style="color:var(--primary-accent);"></i> 巡回コース</h3>
+    ${spotsHtml}
+
+    <a href="${mapUrl}" target="_blank" class="btn-google-nav" style="margin-bottom:14px; text-decoration:none;">
+      <i class="fa-solid fa-arrow-up-right-from-square"></i> Googleマップでナビ開始
+    </a>
+
+    ${isMine ? `
+      <button id="deleteRouteBtn" class="btn-danger" style="width:100%; padding:9px; margin-top:10px;">
+        <i class="fa-regular fa-trash-can"></i> このルートを削除する
+      </button>
+    ` : ''}
+  `;
+
+  if (isMine) {
+    safeOnClick("deleteRouteBtn", async () => {
+      if (!confirm("この共有ルートを削除しますか？")) return;
+      sharedRoutesData = sharedRoutesData.filter(r => r.id !== route.id);
+      renderDiscoverRoutes();
+      document.getElementById("routeDetailModal").classList.remove("show");
+
+      if (db) {
+        await db.from("shared_routes").delete().eq("id", route.id);
+      }
+      alert("ルートを削除しました。");
+    });
+  }
+
+  document.getElementById("routeDetailModal").classList.add("show");
 }
 // ====================================================
 // 8. 相手プロフィール ＆ ブロック・ミュート
@@ -1452,50 +1541,94 @@ function renderStampRallies() {
   if (!container) return;
   container.innerHTML = "";
 
-  if (stampRalliesData.length === 0) {
-    container.innerHTML = `<div style="font-size:12px; color:#94a3b8; padding:8px 0;">現在開催中のスタンプラリーはありません</div>`;
+  if (!stampRalliesData || stampRalliesData.length === 0) {
+    container.innerHTML = `<div style="font-size:12px; color:#94a3b8; padding:8px 0;">現在開催中のスタンプ帳はありません</div>`;
     return;
   }
 
   const userStamps = (currentUser && currentUser.stamps) || [];
 
   stampRalliesData.forEach(rally => {
-    const card = document.createElement("div");
-    card.className = "stamp-rally-card";
     const spots = parseArray(rally.spots);
     const clearedSpots = spots.filter(s => userStamps.includes(s.id));
-
+    
+    const card = document.createElement("div");
+    card.className = "clean-card-box";
+    card.style.cssText = "margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;";
     card.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
-        <h4 style="font-size:14px; font-weight:700; margin:0;">${rally.title}</h4>
-        <span class="tech-badge">${clearedSpots.length} / ${spots.length} 達成</span>
+      <div>
+        <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">${rally.title}</h4>
+        <div style="font-size:11px; color:var(--text-secondary);">${rally.description || rally.desc || ''}</div>
       </div>
-      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px;">${rally.description || rally.desc || ''}</p>
-      
-      <div class="stamp-spots-grid">
-        ${spots.map(s => {
-          const isCleared = userStamps.includes(s.id);
-          return `
-            <div class="stamp-spot-item ${isCleared ? 'cleared' : ''}">
-              <i class="${isCleared ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle'}"></i><br>
-              ${s.name}
-            </div>
-          `;
-        }).join('')}
-      </div>
-
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button class="btn-primary checkin-rally-btn" style="flex:1; padding:8px 12px; font-size:12px;" data-rally="${rally.id}">
-          <i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン
-        </button>
-      </div>
+      <span class="tech-badge" style="white-space:nowrap;">${clearedSpots.length} / ${spots.length} 達成</span>
     `;
 
-    const btn = card.querySelector(".checkin-rally-btn");
-    if (btn) btn.onclick = () => handleGpsCheckIn(rally);
+    // クリックで台紙詳細モーダルを開く
+    card.onclick = () => openStampRallyDetail(rally);
     container.appendChild(card);
   });
 }
+
+// スタンプ帳詳細（Supabaseの台紙画像を背景にセット）
+let currentSelectedRally = null;
+function openStampRallyDetail(rally) {
+  currentSelectedRally = rally;
+  const userStamps = (currentUser && currentUser.stamps) || [];
+  const spots = parseArray(rally.spots);
+
+  document.getElementById("stampDetailTitle").textContent = rally.title;
+  document.getElementById("stampDetailDesc").textContent = rally.description || rally.desc || '';
+  
+  // 台紙画像の反映（Supabaseの `bg_image_url`、空ならデフォルト画像）
+  const boardCanvas = document.getElementById("stampBoardCanvas");
+  const defaultBg = "黒 白 モノクロ シンプル スタンプラリー イベント ポストカード (1).png";
+  if (boardCanvas) {
+    boardCanvas.style.backgroundImage = `url('${rally.bg_image_url || defaultBg}')`;
+  }
+
+  const grid = document.getElementById("stampCirclesGrid");
+  if (grid) {
+    grid.setAttribute("data-count", spots.length);
+    grid.innerHTML = "";
+
+    // 選択されたスポットの個数（1〜4個）だけ円を生成
+    spots.forEach(spot => {
+      const isCleared = userStamps.includes(spot.id);
+      
+      // 画像が見つからない場合の予備検索フォールバック
+      let postImage = spot.image_url;
+      if (!postImage) {
+        const foundPost = postsData.find(p => p.title === spot.name || p.id === spot.id);
+        if (foundPost) {
+          postImage = (foundPost.images && foundPost.images[0]) || foundPost.image_url;
+        }
+      }
+      if (!postImage) postImage = 'https://via.placeholder.com/100?text=SPOT';
+
+      const circle = document.createElement("div");
+      circle.className = `stamp-circle-slot ${isCleared ? 'cleared' : ''}`;
+      circle.innerHTML = `
+        <img src="${postImage}" class="stamp-circle-img" alt="${spot.name}" onerror="this.src='https://via.placeholder.com/100?text=SPOT'">
+        <div class="stamp-circle-name">${spot.name}</div>
+      `;
+      grid.appendChild(circle);
+    });
+  }
+
+  const checkInBtn = document.getElementById("detailCheckInBtn");
+  if (checkInBtn) {
+    checkInBtn.onclick = () => {
+      handleGpsCheckIn(rally);
+      setTimeout(() => openStampRallyDetail(rally), 1000);
+    };
+  }
+
+  document.getElementById("stampRallyDetailModal").classList.add("show");
+}
+
+safeOnClick("closeStampDetailModalBtn", () => {
+  document.getElementById("stampRallyDetailModal").classList.remove("show");
+});
 
 function handleGpsCheckIn(rally) {
   if (!currentUser) { alert("スタンプラリーの参加にはログインが必要です"); return; }
@@ -1583,8 +1716,9 @@ function openCreateRallyModal() {
       postsData.forEach((p, idx) => {
         const div = document.createElement("div");
         div.className = "checkbox-item";
+        const imgUrl = (p.images && p.images[0]) || p.image_url || '';
         div.innerHTML = `
-          <input type="checkbox" id="rally_spot_${idx}" value="${p.id}" data-name="${p.title}" data-lat="${p.lat || 34.6618}" data-lng="${p.lng || 133.9350}">
+          <input type="checkbox" id="rally_spot_${idx}" value="${p.id}" data-name="${p.title}" data-lat="${p.lat || 34.6618}" data-lng="${p.lng || 133.9350}" data-image="${imgUrl}">
           <label for="rally_spot_${idx}">${p.title} (@${p.area})</label>
         `;
         spotContainer.appendChild(div);
@@ -2070,9 +2204,10 @@ ${masterContext || '岡山後楽園、倉敷美観地区、問屋町カフェ通
 
     if (isGeminiSuccess && plan && Array.isArray(plan)) {
       const timeline = document.getElementById("routeTimeline");
+      let mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(start)}/`;
+
       if (timeline) {
         timeline.innerHTML = "";
-        let mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(start)}/`;
         plan.forEach(item => {
           timeline.innerHTML += `<li><b>${item.time} ${item.name}</b><br><span style="color:var(--text-secondary); font-size:12px;">${item.desc}</span></li>`;
           if (item.name !== `${start} 出発`) mapUrl += `${encodeURIComponent(item.name.replace(/^🎯 /, ''))}/`;
@@ -2081,6 +2216,13 @@ ${masterContext || '岡山後楽園、倉敷美観地区、問屋町カフェ通
         const mapLink = document.getElementById("googleMapsLink");
         if (mapLink) mapLink.href = mapUrl;
       }
+
+      // ★ 生成されたルートデータを保持
+      currentGeneratingRouteData = {
+        title: `${start} ➔ ${goal} (${theme})`,
+        spots: plan,
+        mapUrl: mapUrl
+      };
 
       const resTitle = document.getElementById("routeResultTitle");
       if (resTitle) resTitle.textContent = `${start} ➔ ${goal} (${theme})`;
@@ -2414,7 +2556,6 @@ function setupEventListeners() {
   });
 
   // ルート投稿モーダル
-  let currentGeneratingRouteData = null;
   safeOnClick("openPublishRouteModalBtn", () => {
     if (!currentUser) { alert("ルートを投稿するにはログインが必要です"); return; }
     const title = document.getElementById("routeResultTitle").textContent;
@@ -2423,32 +2564,42 @@ function setupEventListeners() {
   });
   safeOnClick("closePublishRouteModalBtn", () => document.getElementById("publishRouteModal").classList.remove("show"));
   safeOnClick("cancelPublishRouteBtn", () => document.getElementById("publishRouteModal").classList.remove("show"));
+  safeOnClick("closeRouteDetailModalBtn", () => document.getElementById("routeDetailModal").classList.remove("show"));
 
   const pubRouteForm = document.getElementById("publishRouteForm");
   if (pubRouteForm) {
-    pubRouteForm.onsubmit = (e) => {
+    pubRouteForm.onsubmit = async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById("submitPublishRouteBtn");
+      if (submitBtn) { submitBtn.textContent = "投稿中..."; submitBtn.disabled = true; }
+
       const title = document.getElementById("pubRouteTitleInput").value.trim();
       const theme = document.getElementById("pubRouteThemeInput").value.trim();
       const desc = document.getElementById("pubRouteDescInput").value.trim();
-      const mapUrl = document.getElementById("googleMapsLink").href;
+      const mapUrl = document.getElementById("googleMapsLink") ? document.getElementById("googleMapsLink").href : "#";
 
       const newSharedRoute = {
         id: generateUniqueId("route"),
         title: title,
         theme: theme || "#岡山モデルコース",
         desc: desc,
-        mapUrl: mapUrl,
+        spots: currentGeneratingRouteData ? currentGeneratingRouteData.spots : [],
+        map_url: mapUrl,
         author: currentUser.nickname,
-        user_id: currentUser.userId,
-        date: new Date().toLocaleDateString("ja-JP")
+        user_id: currentUser.userId
       };
 
       sharedRoutesData.unshift(newSharedRoute);
-      localStorage.setItem("okatari_shared_routes", JSON.stringify(sharedRoutesData));
 
-      alert("🎉 ルートをコミュニティに公開しました！\n「検索」タブの「ルート」からいつでも見られます。");
+      if (db) {
+        await db.from("shared_routes").insert([newSharedRoute]);
+      }
+
+      alert("🎉 ルートをコミュニティに公開・保存しました！\n「検索」タブの「ルート」からいつでも閲覧できます。");
+      if (submitBtn) { submitBtn.textContent = "ルートを投稿する"; submitBtn.disabled = false; }
       document.getElementById("publishRouteModal").classList.remove("show");
+      
+      renderDiscoverRoutes();
     };
   }
   
@@ -2504,21 +2655,37 @@ function setupEventListeners() {
   if (rallyForm) {
     rallyForm.onsubmit = async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById("submitCreateRallyBtn");
+      if (submitBtn) { submitBtn.textContent = "保存中..."; submitBtn.disabled = true; }
+
       const title = document.getElementById("rallyTitleInput").value.trim();
       const desc = document.getElementById("rallyDescInput").value.trim();
       const rewardTitle = document.getElementById("rallyRewardBadgeSelect").value;
-      const checkedBoxes = document.querySelectorAll("#rallySpotsCheckboxList input:checked");
+      
+      // 台紙画像ファイルの選択 ＆ Supabaseへの保存
+      const bgFileInput = document.getElementById("rallyBgFileInput");
+      let bgImageUrl = document.getElementById("rallyBgImageInput") ? document.getElementById("rallyBgImageInput").value.trim() : "";
 
+      if (bgFileInput && bgFileInput.files && bgFileInput.files[0]) {
+        const uploadedUrl = await uploadBgImageToStorage(bgFileInput.files[0]);
+        if (uploadedUrl) bgImageUrl = uploadedUrl;
+      }
+
+      // チェックされたスポットを取得
+      const checkedBoxes = document.querySelectorAll("#rallySpotsCheckboxList input:checked");
       if (checkedBoxes.length === 0) {
-        alert("立ち寄りスポットを少なくとも1つ以上選択してください。");
+        alert("立ち寄りスポットを少なくとも1つ選択してください。");
+        if (submitBtn) { submitBtn.textContent = "ラリーを公開する"; submitBtn.disabled = false; }
         return;
       }
 
+      // 選択されたすべてのスポットを保存（チェックした個数がそのままスタンプ数になります）
       const spots = Array.from(checkedBoxes).map((chk, i) => ({
         id: `spot_${i}_${Date.now()}`,
         name: chk.getAttribute("data-name"),
         lat: parseFloat(chk.getAttribute("data-lat")),
         lng: parseFloat(chk.getAttribute("data-lng")),
+        image_url: chk.getAttribute("data-image") || "",
         radius_m: 600
       }));
 
@@ -2529,6 +2696,7 @@ function setupEventListeners() {
         description: desc,
         reward_title: rewardTitle,
         reward_img: badgeObj ? badgeObj.image_url : "",
+        bg_image_url: bgImageUrl,
         spots: spots,
         active: true
       };
@@ -2538,11 +2706,30 @@ function setupEventListeners() {
 
       if (db) await db.from("stamp_rallies").insert([newRally]);
 
-      alert(`🎉 スタンプラリー「${title}」を公開しました！`);
+      alert(`🎉 スタンプラリー「${title}」を公開しました！\n（スタンプ数: ${spots.length}箇所）`);
       rallyForm.reset();
+      if (submitBtn) { submitBtn.textContent = "ラリーを公開する"; submitBtn.disabled = false; }
       document.getElementById("createRallyModal").classList.remove("show");
     };
   }
+
+  // ★ 1〜4箇所選択制限用の関数
+  window.updateRallySpotLimit = function() {
+    const limitSelect = document.getElementById("rallySpotCountSelect");
+    if (!limitSelect) return;
+    const limit = parseInt(limitSelect.value, 10);
+    const checkboxes = document.querySelectorAll("#rallySpotsCheckboxList input[type='checkbox']");
+    
+    checkboxes.forEach(chk => {
+      chk.onchange = () => {
+        const checkedCount = document.querySelectorAll("#rallySpotsCheckboxList input:checked").length;
+        if (checkedCount > limit) {
+          chk.checked = false;
+          alert(`この台紙のスタンプ数は最大 ${limit} 箇所までです。`);
+        }
+      };
+    });
+  };
 
   // 投稿編集フォーム送信
   const editPostForm = document.getElementById("editPostForm");
@@ -2686,6 +2873,8 @@ function setupEventListeners() {
     if (checks.length === 0) { alert("立ち寄るスポットを選択してください"); return; }
 
     const timeline = document.getElementById("routeTimeline");
+    const spotsList = [{ time: "出発", name: startName, desc: "" }];
+
     if (timeline) {
       timeline.innerHTML = `<li><b>出発: ${startName}</b></li>`;
       let mapUrl = `https://www.google.com/maps/dir/${encodeURIComponent(startName)}/`;
@@ -2693,10 +2882,18 @@ function setupEventListeners() {
       checks.forEach((c, i) => {
         timeline.innerHTML += `<li><b>経由地 ${i + 1}: ${c.value}</b></li>`;
         mapUrl += `${encodeURIComponent(c.value)}/`;
+        spotsList.push({ time: `経由地 ${i + 1}`, name: c.value, desc: "" });
       });
 
       const mapLink = document.getElementById("googleMapsLink");
       if (mapLink) mapLink.href = mapUrl;
+
+      // ★ 生成データを保存
+      currentGeneratingRouteData = {
+        title: `${startName}発 自由巡回ルート`,
+        spots: spotsList,
+        mapUrl: mapUrl
+      };
     }
 
     document.getElementById("routeResultTitle").textContent = "自由選択ルート";
