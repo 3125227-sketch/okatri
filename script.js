@@ -61,7 +61,12 @@ function isInsideOkayama(lat, lng, address) {
 async function geocodeAddress(address) {
   if (!address || address.trim() === "") return null;
   try {
-    const query = encodeURIComponent(address.trim());
+    let searchAddr = address.trim();
+    // 検索精度向上のため、岡山県が含まれていなければ先頭に補完
+    if (!searchAddr.includes("岡山")) {
+      searchAddr = "岡山県 " + searchAddr;
+    }
+    const query = encodeURIComponent(searchAddr);
     const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
     const data = await res.json();
     if (data && data.length > 0) {
@@ -597,6 +602,8 @@ function setTimeMode(mode) {
 }
 
 function isPostMatchTimeMode(post, mode) {
+  // ★ 「いつでも」は朝・昼・夜関係なく常に表示
+  if (post.time_slot === "all") return true;
   if (post.time_slot && post.time_slot !== "all") return post.time_slot === mode;
   const nightKeywords = ["夜", "夜景", "ディナー", "居酒屋", "バー", "ライトアップ", "夕日", "イルミネーション"];
   const text = `${post.title || ""} ${post.tags || ""} ${post.description || ""}`.toLowerCase();
@@ -2282,6 +2289,14 @@ function renderRouteSpotCheckboxes() {
 // ====================================================
 function fetchBackgroundLocation() {
   const status = document.getElementById("geoStatus");
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  // ★ パソコンの場合はGPS取得を行わない
+  if (!isMobile) {
+    if (status) status.textContent = "※パソコンからは住所を入力してピンを刺してください";
+    return;
+  }
+
   if (!navigator.geolocation) {
     if (status) status.textContent = "GPS非対応の環境です";
     return;
@@ -3181,14 +3196,37 @@ function setupEventListeners() {
         const slotIn = document.getElementById("postTimeSlot");
 
         const inputAddress = adIn ? adIn.value.trim() : "";
-        let postLat = currentLatitude;
-        let postLng = currentLongitude;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let postLat = null;
+        let postLng = null;
 
+        // ① 住所入力があれば住所からの緯度経度取得を最優先
         if (inputAddress) {
           const geoResult = await geocodeAddress(inputAddress);
           if (geoResult) {
             postLat = geoResult.lat;
             postLng = geoResult.lng;
+          }
+        }
+
+        // ② 住所で取得できなかった場合、エリア選択名（例：倉敷市）から取得を試みる
+        if (!postLat && aIn && aIn.value) {
+          const geoResult = await geocodeAddress(aIn.value);
+          if (geoResult) {
+            postLat = geoResult.lat;
+            postLng = geoResult.lng;
+          }
+        }
+
+        // ③ それでも未取得かつスマホの場合のみGPSの位置を使用
+        if (!postLat) {
+          if (isMobile) {
+            postLat = currentLatitude;
+            postLng = currentLongitude;
+          } else {
+            // パソコンで指定がない場合は岡山駅付近をデフォルトに
+            postLat = 34.6618;
+            postLng = 133.9350;
           }
         }
 
