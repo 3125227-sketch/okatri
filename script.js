@@ -466,8 +466,13 @@ function setupNavigation() {
   safeOnClick("closeNotifyModalBtn", () => document.getElementById("notifyModal").classList.remove("show"));
 
   safeOnClick("goNewsPageBtn", () => {
-    document.querySelectorAll('[data-tab="tabNewsPage"]').forEach(el => el.click());
-  });
+  const notifyModal = document.getElementById("notifyModal");
+  if (notifyModal) {
+    notifyModal.classList.add("show");
+    const notifyTabOfficialBtn = document.getElementById('notifyTabOfficialBtn');
+    if (notifyTabOfficialBtn) notifyTabOfficialBtn.click();
+  }
+});
 
   safeOnClick("claimCodeBtnNav", () => {
     if (!currentUser) { alert("ログインが必要です"); return; }
@@ -611,7 +616,7 @@ function renderAboutPage() {
 // 4. お知らせ欄
 // ====================================================
 function renderAnnouncements() {
-  const modalContainer = document.getElementById("announcementListModal");
+  const modalContainer = document.getElementById("announcementListModal") || document.getElementById("notifyOfficialSection");
   if (!modalContainer) return;
   modalContainer.innerHTML = "";
 
@@ -889,11 +894,11 @@ function filterByTag(tag) {
 // ====================================================
 // 7. アカウント検索
 // ====================================================
-function renderUserSearch(users) {
-  const container = document.getElementById("userSearchResultGrid");
+function renderUserSearch(users, customQuery = null) {
+  const container = document.getElementById("discoverUsersGrid") || document.getElementById("userSearchResultGrid");
   const searchInput = document.getElementById("userSearchInput");
   if (!container) return;
-  const query = searchInput ? searchInput.value.toLowerCase() : "";
+  const query = customQuery !== null ? customQuery.toLowerCase() : (searchInput ? searchInput.value.toLowerCase() : "");
   container.innerHTML = "";
 
   let filtered = users.filter(u => u.user_id !== "guest");
@@ -3261,14 +3266,15 @@ function setupEventListeners() {
         filtered = filtered.filter(p => 
           (p.title && p.title.toLowerCase().includes(query)) ||
           (p.area && p.area.toLowerCase().includes(query)) ||
-          (p.tags && p.tags.toLowerCase().includes(query))
+          (p.tags && p.tags.toLowerCase().includes(query)) ||
+          (p.description && p.description.toLowerCase().includes(query))
         );
       }
       renderDiscoverPosts(filtered);
     } else if (currentDiscoverTab === "routes") {
       renderDiscoverRoutes(query);
     } else if (currentDiscoverTab === "users") {
-      renderUserSearch(allUsersData);
+      renderUserSearch(allUsersData, query); // ← 検索文字を渡して絞り込み
     }
   }
 

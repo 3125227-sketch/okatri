@@ -1498,3 +1498,95 @@ body {
   margin: 0 auto 10px;
   flex-shrink: 0;
 }
+/* モーダル枠本体（ボトムシート） */
+#postCommentsModal .modal-content,
+.post-comments-modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 70vh; /* または 70% 〜 80% などモーダルの高さ */
+  max-height: 85vh;
+  bottom: 0;
+  background: #ffffff;
+}
+
+/* コメント一覧を表示するエリア（★ここが一番重要です） */
+#postCommentsModalList {
+  flex: 1; /* 空きスペースをすべて埋めることで入力バーを最下部に押します */
+  overflow-y: auto; /* コメントが増えたらスクロール */
+  padding: 16px;
+}
+
+/* 下部のコメント入力バー領域 */
+.comment-input-bar, 
+#postCommentsModal .input-container { /* 入力エリアを囲んでいる要素のクラス/ID */
+  flex-shrink: 0; /* 潰れないように固定 */
+  margin-top: auto; /* 最下部に押し下げ */
+  padding-bottom: max(16px, env(safe-area-inset-bottom)); /* スマホのホームバー被り防止 */
+}
+/* 【新しいコード】CSS（CSSファイルの一番最後に貼り付け） */
+#notifyModal, #newsDetailModal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5); /* 背景を半透明に */
+  z-index: 2000;
+  align-items: center;
+  justify-content: center; /* 画面の中央に配置 */
+}
+
+#notifyModal.show, #newsDetailModal.show {
+  display: flex !important;
+}
+
+#notifyModal .modal-content, #newsDetailModal .modal-content {
+  background: #ffffff;
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  border-radius: 16px;
+  overflow-y: auto;
+  padding: 20px;
+  position: relative;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  margin: auto;
+}
+/* スマホ版：検索投稿 ＆ マイページ（投稿・保存済み）の3列グリッド表示 */
+@media (max-width: 768px) {
+  #discoverPostsGrid,
+  #myProfileSpotsGrid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 2px !important; /* 写真同士の隙間 */
+  }
+
+  /* カードの余白や枠線をリセット */
+  #discoverPostsGrid .spot-card,
+  #myProfileSpotsGrid .spot-card {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* 写真を正方形（1:1）で綺麗に並べる */
+  #discoverPostsGrid .card-img-wrap,
+  #myProfileSpotsGrid .card-img-wrap,
+  #discoverPostsGrid .card-img,
+  #myProfileSpotsGrid .card-img {
+    aspect-ratio: 1 / 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    border-radius: 0 !important;
+  }
+
+  /* 画像のみ整列させるためテキスト部分を非表示 */
+  #discoverPostsGrid .card-body,
+  #myProfileSpotsGrid .card-body {
+    display: none !important;
+  }
+}
