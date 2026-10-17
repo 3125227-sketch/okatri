@@ -1758,3 +1758,76 @@ body {
   bottom: 0;
   z-index: 5;
 }
+/* ====================================================
+   【完全修正】モーダル・ボトムシートの下部切れ・固定表示対策
+==================================================== */
+
+/* 1. モーダル背景を最前面＆画面下に正しく配置 */
+.modal-backdrop {
+  z-index: 20000 !important;
+  justify-content: flex-end !important; /* スマホでは下から出るボトムシート化 */
+}
+
+/* 2. コメントボトムシートのFlex構造修正 */
+#postCommentsModal .modal-sheet,
+.wear-comments-sheet {
+  height: 80dvh !important;       /* 高さを画面の80%に固定 */
+  max-height: 80dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;     /* シート自体のスクロールを禁止 */
+  padding: 12px 16px 0 16px !important;
+  border-radius: 20px 20px 0 0 !important;
+  background: #ffffff !important;
+}
+
+/* ドラッグバー ＆ ヘッダーは固定 */
+.modal-drag-handle,
+#postCommentsModal .modal-header {
+  flex-shrink: 0 !important;
+}
+
+/* コメント一覧のみを可変＆内部スクロールにする */
+#postCommentsModalList {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding: 10px 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* 入力バーを画面最下部に【完全固定】 */
+.wear-comment-bar {
+  flex-shrink: 0 !important;
+  background: #ffffff !important;
+  padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px)) 0 !important;
+  border-top: 1px solid var(--border-subtle, #e2e8f0) !important;
+  margin-top: auto !important;
+  z-index: 100 !important;
+}
+
+
+/* 3. スタンプ帳詳細モーダルの高さ収まり＆スクロール修正 */
+#stampRallyDetailModal .modal-sheet,
+.stamp-detail-content {
+  max-height: 82dvh !important;   /* 画面の82%以内に収める */
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;     /* 収まらない場合は内部スクロール */
+  -webkit-overflow-scrolling: touch !important;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* スタンプ台紙のサイズが大きすぎてボタンを押し出さないよう調整 */
+.stamp-board-canvas {
+  max-height: 380px !important;
+  flex-shrink: 0 !important;
+}
+
+/* チェックインボタンが見切れないよう押し下げ＆マージン確保 */
+#detailCheckInBtn {
+  flex-shrink: 0 !important;
+  margin-top: 16px !important;
+  margin-bottom: 8px !important;
+  width: 100% !important;
+}
