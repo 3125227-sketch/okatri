@@ -1562,15 +1562,17 @@ body {
 
 /* モーダル本体 */
 #stampRallyDetailModal .modal-sheet,
-#stampRallyDetailModal .stamp-detail-content {
+#stampRallyDetailModal .stamp-detail-content,
+#stampRallyDetailModal .modal-content {
   width: 100% !important;
-  max-width: 420px !important;
+  max-width: 400px !important;
   max-height: 85dvh !important;
   display: flex !important;
   flex-direction: column !important;
+  align-items: center !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
-  padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 12px)) 16px !important;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 12px)) 16px !important;
   border-radius: 20px 20px 0 0 !important;
   background: #ffffff !important;
   margin: 0 auto !important;
@@ -1581,17 +1583,18 @@ body {
 #stampRallyDetailModal .modal-header {
   flex-shrink: 0 !important;
   width: 100% !important;
-  margin-bottom: 8px !important;
+  margin-bottom: 4px !important;
 }
 
-/* 台紙キャンバス（用意された台紙画像を背景として全体に配置） */
+/* 台紙キャンバス（縦横比 2:3） */
 .stamp-board-canvas {
   position: relative !important;
-  width: 100% !important;
-  max-width: 320px !important;
-  height: 320px !important;              /* スマホ画面内に綺麗に収まる台紙サイズ */
-  margin: 8px auto 16px auto !important;
-  background-size: cover !important;     /* 台紙画像を枠内にぴったりフィット */
+  width: 210px !important;              /* 台紙の幅 */
+  aspect-ratio: 2 / 3 !important;       /* 縦横比 2:3（高さ 315px） */
+  max-width: 75vw !important;
+  max-height: 42dvh !important;         /* スマホ画面でボタンを押し出さない上限サイズ */
+  margin: 8px auto 12px auto !important;
+  background-size: cover !important;     /* 用意された台紙画像を枠内にフィット */
   background-position: center !important;
   background-repeat: no-repeat !important;
   border-radius: 12px !important;
@@ -1601,26 +1604,26 @@ body {
   justify-content: center !important;
   flex-shrink: 0 !important;
   overflow: hidden !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06) !important;
 }
 
-/* 丸枠の配置用グリッド（台紙の中央にスタンプ円枠を並べる） */
+/* 台紙の中の丸枠配置エリア */
 .stamp-circles-grid {
   display: flex !important;
   flex-wrap: wrap !important;
   justify-content: center !important;
   align-items: center !important;
-  gap: 12px !important;
+  gap: 10px !important;
   width: 90% !important;
   margin: 0 auto !important;
   z-index: 2 !important;
 }
 
-/* スタンプ個数に応じた円のサイズ自動調整 */
-.stamp-circles-grid[data-count="1"] .stamp-circle-slot { width: 130px !important; height: 130px !important; }
-.stamp-circles-grid[data-count="2"] .stamp-circle-slot { width: 100px !important; height: 100px !important; }
-.stamp-circles-grid[data-count="3"] .stamp-circle-slot { width: 85px !important; height: 85px !important; }
-.stamp-circles-grid[data-count="4"] .stamp-circle-slot { width: 90px !important; height: 90px !important; }
+/* スタンプ個数に応じた円のサイズ調整（2:3縦長画面に対応） */
+.stamp-circles-grid[data-count="1"] .stamp-circle-slot { width: 110px !important; height: 110px !important; }
+.stamp-circles-grid[data-count="2"] .stamp-circle-slot { width: 85px !important; height: 85px !important; }
+.stamp-circles-grid[data-count="3"] .stamp-circle-slot { width: 75px !important; height: 75px !important; }
+.stamp-circles-grid[data-count="4"] .stamp-circle-slot { width: 78px !important; height: 78px !important; }
 
 /* 円形枠（上がスポット画像、下が場所名） */
 .stamp-circle-slot {
@@ -1629,7 +1632,7 @@ body {
   border: 2px dashed #262626 !important;
   background: #ffffff !important;
   overflow: hidden !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
   display: flex !important;
   flex-direction: column !important;
   flex-shrink: 0 !important;
@@ -1665,15 +1668,15 @@ body {
   top: 50% !important;
   left: 50% !important;
   transform: translate(-50%, -50%) rotate(-12deg) !important;
-  width: 50px !important;
-  height: 50px !important;
+  width: 46px !important;
+  height: 46px !important;
   border: 3px double #dc2626 !important;
   color: #dc2626 !important;
   border-radius: 50% !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 20px !important;
+  font-size: 18px !important;
   font-weight: 900 !important;
   background: rgba(255, 255, 255, 0.88) !important;
   box-shadow: 0 0 4px rgba(220, 38, 38, 0.3) !important;
@@ -1681,14 +1684,23 @@ body {
   pointer-events: none !important;
 }
 
-/* チェックインボタン（台紙の下に綺麗に収まる） */
+/* チェックインボタン：台紙の下に確実にピンク色のボタンを表示 */
 #detailCheckInBtn {
   flex-shrink: 0 !important;
   width: 100% !important;
-  margin-top: 8px !important;
-  padding: 12px !important;
+  max-width: 260px !important;
+  margin: 10px auto 0 auto !important;
+  padding: 12px 16px !important;
+  background: var(--primary-accent, #f02868) !important;
+  color: #ffffff !important;
+  border: none !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   border-radius: var(--radius-md, 8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  cursor: pointer !important;
   z-index: 10 !important;
 }
