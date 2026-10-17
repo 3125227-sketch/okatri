@@ -1720,3 +1720,40 @@ body {
   cursor: pointer !important;
   z-index: 10 !important;
 }
+/* スマホ版：検索投稿 ＆ マイページ（投稿・保存済み）の3列グリッド表示 */
+@media (max-width: 768px) {
+  #discoverPostsGrid,
+  #myProfileSpotsGrid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 2px !important; /* 写真同士の隙間 */
+  }
+
+  /* カードの余白や枠線をリセット */
+  #discoverPostsGrid .spot-card,
+  #myProfileSpotsGrid .spot-card {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  /* 写真を正方形（1:1）で綺麗に並べる */
+  #discoverPostsGrid .card-img-wrap,
+  #myProfileSpotsGrid .card-img-wrap,
+  #discoverPostsGrid .card-img,
+  #myProfileSpotsGrid .card-img {
+    aspect-ratio: 1 / 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    border-radius: 0 !important;
+  }
+
+  /* 画像のみ整列させるためテキスト部分を非表示 */
+  #discoverPostsGrid .card-body,
+  #myProfileSpotsGrid .card-body {
+    display: none !important;
+  }
+}
