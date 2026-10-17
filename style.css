@@ -1555,46 +1555,62 @@ body {
    2. スタンプ帳詳細モーダル (#stampRallyDetailModal)
 ---------------------------------------------------- */
 #stampRallyDetailModal.modal-backdrop {
+  display: none;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  background: rgba(15, 23, 42, 0.5) !important;
   z-index: 25000 !important;
-  justify-content: flex-end !important;
-  align-items: center !important;
+  justify-content: center !important; /* 画面中央に配置 */
+  align-items: center !important;    /* 画面中央に配置 */
+  padding: 16px !important;
 }
 
-/* モーダル本体 */
+#stampRallyDetailModal.modal-backdrop.show {
+  display: flex !important;
+}
+
+/* モーダル本体（画面幅にしっかり合わせる・全周角丸） */
 #stampRallyDetailModal .modal-sheet,
 #stampRallyDetailModal .stamp-detail-content,
 #stampRallyDetailModal .modal-content {
-  width: 100% !important;
-  max-width: 400px !important;
+  width: 92% !important;              /* スマホ画面の横幅にしっかり合わせる */
+  max-width: 440px !important;
   max-height: 85dvh !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
-  padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 12px)) 16px !important;
-  border-radius: 20px 20px 0 0 !important;
+  padding: 20px 20px 24px 20px !important;
+  border-radius: 16px !important;    /* 中央表示用の四隅角丸 */
   background: #ffffff !important;
-  margin: 0 auto !important;
+  margin: auto !important;
   box-sizing: border-box !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* モーダルヘッダー */
 #stampRallyDetailModal .modal-header {
   flex-shrink: 0 !important;
   width: 100% !important;
-  margin-bottom: 4px !important;
+  margin-bottom: 8px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
 }
 
-/* 台紙キャンバス（縦横比 2:3） */
+/* 台紙キャンバス（縦横比 2:3・横幅フィット） */
 .stamp-board-canvas {
   position: relative !important;
-  width: 210px !important;              /* 台紙の幅 */
-  aspect-ratio: 2 / 3 !important;       /* 縦横比 2:3（高さ 315px） */
-  max-width: 75vw !important;
-  max-height: 42dvh !important;         /* スマホ画面でボタンを押し出さない上限サイズ */
-  margin: 8px auto 12px auto !important;
-  background-size: cover !important;     /* 用意された台紙画像を枠内にフィット */
+  width: 100% !important;
+  max-width: 270px !important;         /* 画面高さを超えてボタンを消さない上限幅 */
+  aspect-ratio: 2 / 3 !important;       /* 縦横比 2:3 */
+  margin: 8px auto 16px auto !important;
+  background-size: cover !important;     /* 台紙画像を枠内にぴったりフィット */
   background-position: center !important;
   background-repeat: no-repeat !important;
   border-radius: 12px !important;
@@ -1604,7 +1620,7 @@ body {
   justify-content: center !important;
   flex-shrink: 0 !important;
   overflow: hidden !important;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08) !important;
 }
 
 /* 台紙の中の丸枠配置エリア */
@@ -1613,17 +1629,17 @@ body {
   flex-wrap: wrap !important;
   justify-content: center !important;
   align-items: center !important;
-  gap: 10px !important;
+  gap: 12px !important;
   width: 90% !important;
   margin: 0 auto !important;
   z-index: 2 !important;
 }
 
-/* スタンプ個数に応じた円のサイズ調整（2:3縦長画面に対応） */
-.stamp-circles-grid[data-count="1"] .stamp-circle-slot { width: 110px !important; height: 110px !important; }
-.stamp-circles-grid[data-count="2"] .stamp-circle-slot { width: 85px !important; height: 85px !important; }
-.stamp-circles-grid[data-count="3"] .stamp-circle-slot { width: 75px !important; height: 75px !important; }
-.stamp-circles-grid[data-count="4"] .stamp-circle-slot { width: 78px !important; height: 78px !important; }
+/* スタンプ個数に応じた円のサイズ調整 */
+.stamp-circles-grid[data-count="1"] .stamp-circle-slot { width: 130px !important; height: 130px !important; }
+.stamp-circles-grid[data-count="2"] .stamp-circle-slot { width: 100px !important; height: 100px !important; }
+.stamp-circles-grid[data-count="3"] .stamp-circle-slot { width: 85px !important; height: 85px !important; }
+.stamp-circles-grid[data-count="4"] .stamp-circle-slot { width: 90px !important; height: 90px !important; }
 
 /* 円形枠（上がスポット画像、下が場所名） */
 .stamp-circle-slot {
@@ -1668,15 +1684,15 @@ body {
   top: 50% !important;
   left: 50% !important;
   transform: translate(-50%, -50%) rotate(-12deg) !important;
-  width: 46px !important;
-  height: 46px !important;
+  width: 50px !important;
+  height: 50px !important;
   border: 3px double #dc2626 !important;
   color: #dc2626 !important;
   border-radius: 50% !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 18px !important;
+  font-size: 20px !important;
   font-weight: 900 !important;
   background: rgba(255, 255, 255, 0.88) !important;
   box-shadow: 0 0 4px rgba(220, 38, 38, 0.3) !important;
@@ -1684,12 +1700,12 @@ body {
   pointer-events: none !important;
 }
 
-/* チェックインボタン：台紙の下に確実にピンク色のボタンを表示 */
+/* チェックインボタン：台紙の下に確実に配置 */
 #detailCheckInBtn {
   flex-shrink: 0 !important;
   width: 100% !important;
-  max-width: 260px !important;
-  margin: 10px auto 0 auto !important;
+  max-width: 270px !important;
+  margin: 12px auto 0 auto !important;
   padding: 12px 16px !important;
   background: var(--primary-accent, #f02868) !important;
   color: #ffffff !important;
