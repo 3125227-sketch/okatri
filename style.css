@@ -1706,3 +1706,55 @@ body {
   padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
   flex-shrink: 0 !important;
 }
+/* ==========================================
+   モーダル・ボトムシートの重なり・下部余白修正
+=========================================== */
+
+/* 1. モーダル全体をボトムナビ等より最前面に配置 */
+.modal-backdrop {
+  z-index: 10000 !important;
+}
+
+/* 2. コメントボトムシートの高さと入力バーの固定位置調整 */
+.wear-comments-sheet {
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  /* スマホのセーフエリア（ホームバー）や下部余白を確保 */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* コメント一覧エリアのスクロール確保 */
+#postCommentsModalList {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 10px;
+}
+
+/* コメント入力バーを下部に固定 */
+.wear-comment-bar {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  padding: 10px 0;
+  z-index: 10;
+  border-top: 1px solid var(--border-subtle, #e2e8f0);
+}
+
+/* 3. スタンプ帳詳細モーダルの高さ制限とチェックインボタンの余白確保 */
+.stamp-detail-content {
+  max-height: 85vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* 下部ボタンが隠れないよう十分な余白を設定 */
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* チェックインボタンが見切れにくく押しやすい位置に調整 */
+#detailCheckInBtn {
+  margin-top: 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
