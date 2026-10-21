@@ -240,9 +240,9 @@ async function initApp() {
             notify_settings: me.notify_settings || { likes: true, comments: true, follows: true }
           };
           localStorage.setItem("okatari_user", JSON.stringify(currentUser));
-          updateUserUI();
-          fetchNotifications();
         }
+        updateUserUI();
+        fetchNotifications(); // ログイン中なら確実に通知を取得
       }
     } catch (e) {
       console.warn("初期化エラー:", e);
@@ -364,74 +364,143 @@ async function uploadBgImageToStorage(file) {
 // ★ 通知の送信・取得
 // ====================================================
 async function sendNotification(toUserId, type, postId = null, postTitle = null) {
-  if (!db || !currentUser || currentUser.userId === toUserId) return;
+  if (!currentUser) return;
 
-  const targetUser = allUsersData.find(u => u.user_id === toUserId);
-  if (targetUser && targetUser.notify_settings) {
-    const settings = typeof targetUser.notify_settings === 'string' ? JSON.parse(targetUser.notify_settings) : targetUser.notify_settings;
-    if (type === 'like' && !settings.likes) return;
-    if (type === 'comment' && !settings.comments) return;
-    if (type === 'follow' && !settings.follows) return;
+  // 宛先IDのトリミングとチェック
+  const targetId = (toUserId || "").trim();
+  const myId = (currentUser.userId || "").trim();
+
+  // 自分自身へのアクションやゲスト投稿へのアクションは除外
+  if (!targetId || targetId === "guest" || targetId === myId) {
+    return;
   }
 
   const newNotify = {
     id: generateUniqueId("notif"),
-    to_user_id: toUserId,
-    from_user_id: currentUser.userId,
-    from_nickname: currentUser.nickname,
+    to_user_id: targetId,
+    from_user_id: myId,
+    from_nickname: currentUser.nickname || myId,
     type: type,
     post_id: postId,
-    post_title: postTitle,
-    is_read: false
+    post_title: postTitle || "スポット",
+    is_read: false,
+    created_at: new Date().toISOString()
   };
 
-  await db.from("notifications").insert([newNotify]);
+  // ★ 1. ブラウザ内の全通知プール（ローカルストレージ）に即時保存（アカウント切り替えテストでも確実に届く）
+  try {
+    let localPool = JSON.parse(localStorage.getItem("okatari_global_notifications") || "[]");
+    localPool.unshift(newNotify);
+    if (localPool.length > 100) localPool = localPool.slice(0, 100);
+    localStorage.setItem("okatari_global_notifications", JSON.stringify(localPool));
+  } catch(e) {
+    console.warn("ローカル通知保存エラー:", e);
+  }
+
+  // ★ 2. Supabase にも保存
+  if (db) {
+    try {
+      const { error } = await db.from("notifications").insert([newNotify]);
+      if (error) {
+        console.warn("Supabase通知保存エラー（ローカル通知で代替されます）:", error.message);
+      }
+    } catch (err) {
+      console.warn("通知通信エラー:", err);
+    }
+  }
 }
 
 async function fetchNotifications() {
-  if (!db || !currentUser) return;
-  const { data } = await db
-    .from("notifications")
-    .select("*")
-    .eq("to_user_id", currentUser.userId)
-    .order("created_at", { ascending: false })
-    .limit(30);
+  if (!currentUser) {
+    notificationsData = [];
+    updateNotificationBadges(0);
+    renderNotificationsPage();
+    return;
+  }
 
-  if (data) {
-    notificationsData = data;
-    const unreadCount = data.filter(n => !n.is_read).length;
-    
-    const mBadge = document.getElementById("mobileNotifyCount");
-    const sBadge = document.getElementById("sidebarNotifyCount");
+  const myId = (currentUser.userId || "").trim();
+  let mergedNotifs = [];
 
-    if (mBadge) {
-      mBadge.textContent = unreadCount;
-      mBadge.style.display = unreadCount > 0 ? "inline-block" : "none";
+  // 1. ローカルストレージの通知プールから自分宛てを取得
+  try {
+    const localPool = JSON.parse(localStorage.getItem("okatari_global_notifications") || "[]");
+    mergedNotifs = localPool.filter(n => (n.to_user_id || "").trim() === myId);
+  } catch(e) {}
+
+  // 2. Supabase からも自分宛てを取得してマージ
+  if (db) {
+    try {
+      const { data, error } = await db
+        .from("notifications")
+        .select("*")
+        .eq("to_user_id", myId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (!error && data && data.length > 0) {
+        // 重複を除いてマージ
+        data.forEach(dbItem => {
+          if (!mergedNotifs.some(m => m.id === dbItem.id)) {
+            mergedNotifs.push(dbItem);
+          }
+        });
+      }
+    } catch(err) {
+      console.warn("DB通知同期エラー:", err);
     }
-    if (sBadge) {
-      sBadge.textContent = unreadCount;
-      sBadge.style.display = unreadCount > 0 ? "inline-block" : "none";
-    }
+  }
+
+  // 作成日時順に並び替え
+  mergedNotifs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  notificationsData = mergedNotifs;
+
+  const unreadCount = notificationsData.filter(n => !n.is_read).length;
+  updateNotificationBadges(unreadCount);
+  renderNotificationsPage();
+}
+
+// バッジ件数表示の共通化
+function updateNotificationBadges(count) {
+  const mBadge = document.getElementById("mobileNotifyCount");
+  const sBadge = document.getElementById("sidebarNotifyCount");
+  if (mBadge) {
+    mBadge.textContent = count;
+    mBadge.style.display = count > 0 ? "inline-block" : "none";
+  }
+  if (sBadge) {
+    sBadge.textContent = count;
+    sBadge.style.display = count > 0 ? "inline-block" : "none";
   }
 }
 
 function renderNotificationsPage() {
-  const container = document.getElementById("notifyPageListContainer");
-  if (!container) return;
-  container.innerHTML = "";
+  // ページ側とモーダル側の両方のコンテナを更新
+  const containers = [
+    document.getElementById("notifyPageListContainer"),
+    document.getElementById("notifyListContainer")
+  ].filter(Boolean);
 
-  if (!currentUser) {
-    container.innerHTML = `<div class="empty-state">ログインすると通知が表示されます</div>`;
-    return;
-  }
+  if (containers.length === 0) return;
 
-  if (notificationsData.length === 0) {
-    container.innerHTML = `<div class="empty-state">新しい通知はありません</div>`;
-  } else {
+  containers.forEach(container => {
+    container.innerHTML = "";
+
+    if (!currentUser) {
+      container.innerHTML = `<div class="empty-state">ログインすると通知が表示されます</div>`;
+      return;
+    }
+
+    if (!notificationsData || notificationsData.length === 0) {
+      container.innerHTML = `<div class="empty-state">新しい通知はありません</div>`;
+      return;
+    }
+
     notificationsData.forEach(n => {
       const item = document.createElement("div");
       item.className = `notify-item ${n.is_read ? '' : 'unread'}`;
-      let icon = '<i class="fa-solid fa-bell"></i>';
+      item.style.cursor = "pointer";
+
+      let icon = '<div class="notify-icon" style="background:#64748b;"><i class="fa-solid fa-bell"></i></div>';
       let text = '';
 
       if (n.type === 'like') {
@@ -447,18 +516,32 @@ function renderNotificationsPage() {
 
       item.innerHTML = `
         ${icon}
-        <div style="flex:1;">${text}</div>
+        <div style="flex:1; line-height:1.4;">${text}</div>
+        ${!n.is_read ? '<span style="width:7px; height:7px; border-radius:50%; background:var(--primary-accent); flex-shrink:0;"></span>' : ''}
       `;
 
       item.onclick = async () => {
-        if (!n.is_read && db) {
+        // 未読なら即座に既読状態を反映
+        if (!n.is_read) {
           n.is_read = true;
-          await db.from("notifications").update({ is_read: true }).eq("id", n.id);
-          fetchNotifications();
+          item.classList.remove("unread");
+          const unreadCount = notificationsData.filter(x => !x.is_read).length;
+          updateNotificationBadges(unreadCount);
+
+          if (db) {
+            await db.from("notifications").update({ is_read: true }).eq("id", n.id);
+          }
         }
+
+        // 通知対象の投稿詳細またはユーザー画面を開く
         if (n.post_id) {
-          const p = postsData.find(x => x.id === n.post_id);
-          if (p) openDetail(p);
+          let post = postsData.find(x => x.id === n.post_id);
+          if (!post && db) {
+            // ローカルにまだ無い投稿ならDBから直接取得
+            const { data } = await db.from("posts").select("*").eq("id", n.post_id).maybeSingle();
+            if (data) post = data;
+          }
+          if (post) openDetail(post);
         } else if (n.type === 'follow') {
           openUserProfile(n.from_user_id, n.from_nickname);
         }
@@ -466,7 +549,7 @@ function renderNotificationsPage() {
 
       container.appendChild(item);
     });
-  }
+  });
 }
 
 // ====================================================
@@ -515,7 +598,7 @@ function setupNavigation() {
       if (tabId === "tabNewsPage") renderAnnouncements();
       if (tabId === "tabAbout") renderAboutPage();
       if (tabId === "tabNotifications") {
-        renderNotificationsPage();
+        fetchNotifications(); // サーバーから最新通知を取得して描画
       }
     });
   });
@@ -1580,6 +1663,53 @@ async function toggleFeaturedBadge(badgeTitle) {
   }
 }
 
+// スタンプラリーのミニチュアカードHTMLを生成する共通ヘルパー
+function createStampRallyMiniCardElement(rally, userStamps) {
+  const spots = parseArray(rally.spots);
+  const clearedSpots = spots.filter(s => userStamps.includes(s.id));
+  const defaultBg = "黒 白 モノクロ シンプル スタンプラリー イベント ポストカード (1).png";
+  const bgImg = rally.bg_image_url || defaultBg;
+
+  const card = document.createElement("div");
+  card.className = "stamp-rally-mini-card";
+  card.style.backgroundImage = `url('${bgImg}')`;
+
+  // 詳細画面と同じく、スポット枠（および達成時の「済」スタンプ）をミニチュア表示
+  const circlesHtml = spots.map(s => {
+    const isCleared = userStamps.includes(s.id);
+    let postImage = s.image_url;
+    if (!postImage) {
+      const foundPost = postsData.find(p => p.title === s.name || p.id === s.id);
+      if (foundPost) postImage = (foundPost.images && foundPost.images[0]) || foundPost.image_url;
+    }
+    if (!postImage) postImage = 'https://via.placeholder.com/60?text=SPOT';
+
+    return `
+      <div class="mini-board-slot ${isCleared ? 'cleared' : ''}">
+        <img src="${postImage}" onerror="this.src='https://via.placeholder.com/60?text=SPOT'">
+      </div>
+    `;
+  }).join('');
+
+  card.innerHTML = `
+    <div style="text-align:right;">
+      <span class="tech-badge" style="font-size:9px; padding:1px 5px; background:rgba(255,255,255,0.9);">
+        ${clearedSpots.length}/${spots.length}
+      </span>
+    </div>
+    <div class="mini-board-circles">
+      ${circlesHtml}
+    </div>
+    <div class="mini-board-info">
+      <div class="mini-board-title">${rally.title}</div>
+      <div class="mini-board-progress">${clearedSpots.length === spots.length ? '🎉 COMPLETE' : `${clearedSpots.length}/${spots.length} 達成`}</div>
+    </div>
+  `;
+
+  card.onclick = () => openStampRallyDetail(rally);
+  return card;
+}
+
 function renderStampRallies() {
   const container = document.getElementById("stampRallyContainer");
   if (!container) return;
@@ -1592,25 +1722,38 @@ function renderStampRallies() {
 
   const userStamps = (currentUser && currentUser.stamps) || [];
 
+  // 横スクロール一覧にミニカードを追加
   stampRalliesData.forEach(rally => {
-    const spots = parseArray(rally.spots);
-    const clearedSpots = spots.filter(s => userStamps.includes(s.id));
-    
-    const card = document.createElement("div");
-    card.className = "clean-card-box";
-    card.style.cssText = "margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;";
-    card.innerHTML = `
-      <div>
-        <h4 style="font-size:14px; font-weight:700; margin:0 0 4px;">${rally.title}</h4>
-        <div style="font-size:11px; color:var(--text-secondary);">${rally.description || rally.desc || ''}</div>
-      </div>
-      <span class="tech-badge" style="white-space:nowrap;">${clearedSpots.length} / ${spots.length} 達成</span>
-    `;
-
-    // クリックで台紙詳細モーダルを開く
-    card.onclick = () => openStampRallyDetail(rally);
+    const card = createStampRallyMiniCardElement(rally, userStamps);
     container.appendChild(card);
   });
+}
+
+// 全件一覧モーダルを開く関数
+function openAllRalliesModal() {
+  const modal = document.getElementById("allRalliesModal");
+  const grid = document.getElementById("allRalliesGrid");
+  if (!modal || !grid) return;
+
+  grid.innerHTML = "";
+  const userStamps = (currentUser && currentUser.stamps) || [];
+
+  if (!stampRalliesData || stampRalliesData.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">開催中のスタンプラリーはありません</div>`;
+  } else {
+    stampRalliesData.forEach(rally => {
+      const card = createStampRallyMiniCardElement(rally, userStamps);
+      // 詳細モーダルが開く際、全件一覧モーダルを閉じる
+      const originalClick = card.onclick;
+      card.onclick = () => {
+        modal.classList.remove("show");
+        if (originalClick) originalClick();
+      };
+      grid.appendChild(card);
+    });
+  }
+
+  modal.classList.add("show");
 }
 
 // スタンプ帳詳細（Supabaseの台紙画像を背景にセット）
@@ -1939,7 +2082,10 @@ function openDetail(item) {
   });
 
   safeOnClick("openEditPostBtn", () => openEditPostModal(item));
-  safeOnClick("detailLikeBtn", () => { toggleLike(item.id); openDetail(item); });
+  safeOnClick("detailLikeBtn", async () => { 
+    await toggleLike(item.id); 
+    openDetail(item); 
+  });
   safeOnClick("detailBmBtn", () => { toggleBookmark(item.id); openDetail(item); });
 
   safeOnClick("adminPickupBtn", async () => {
@@ -2154,7 +2300,8 @@ async function toggleLike(postId) {
 
   if (isNowLiked) {
     likes.push(currentUser.userId);
-    sendNotification(post.user_id, 'like', post.id, post.title);
+    // ★ await で確実に通知を書き込んでから続行
+    await sendNotification(post.user_id, 'like', post.id, post.title);
   } else {
     likes.splice(idx, 1);
   }
@@ -2587,6 +2734,11 @@ function setupEventListeners() {
   safeOnClick("cancelCreateRallyBtn", () => document.getElementById("createRallyModal").classList.remove("show"));
   safeOnClick("closeCreateBadgeModalBtn", () => document.getElementById("createBadgeModal").classList.remove("show"));
   safeOnClick("cancelCreateBadgeBtn", () => document.getElementById("createBadgeModal").classList.remove("show"));
+  // 「すべて見る」ボタン ＆ 全件モーダル閉じるボタン
+  safeOnClick("openAllRalliesBtn", openAllRalliesModal);
+  safeOnClick("closeAllRalliesModalBtn", () => {
+    document.getElementById("allRalliesModal").classList.remove("show");
+  });
 
   // 昼夜切り替えボタン
   safeOnClick("setTimeDayBtn", () => setTimeMode("day"));
@@ -3331,6 +3483,7 @@ function setupEventListeners() {
         renderMyAchievements();
         renderPokedex();
         renderStampRallies();
+        fetchNotifications(); // ★ ログアウト時に通知バッジと一覧をリセット
         closeMobileDrawer();
       }
     } else {

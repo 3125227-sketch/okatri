@@ -461,8 +461,11 @@
         </div>
 
         <!-- 開催中スタンプラリー -->
-        <h3 class="sub-heading" style="margin-top:0;"><i class="fa-solid fa-location-dot" style="color:var(--primary-accent);"></i> スタンプ帳一覧</h3>
-        <div id="stampRallyContainer"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0; margin-bottom:10px;">
+          <h3 class="sub-heading" style="margin:0;"><i class="fa-solid fa-location-dot" style="color:var(--primary-accent);"></i> スタンプ帳一覧</h3>
+          <button type="button" id="openAllRalliesBtn" class="see-all-link-btn">すべて見る <i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <div id="stampRallyContainer" class="stamp-rally-h-scroll"></div>
 
         <!-- バッジ図鑑一覧 -->
         <h3 class="sub-heading"><i class="fa-solid fa-book-open" style="color:var(--primary-accent);"></i> バッジ図鑑</h3>
@@ -1034,6 +1037,16 @@
     <button id="detailCheckInBtn" class="btn-primary" style="width:100%; padding:10px;">
       <i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン
     </button>
+  </div>
+</div>
+  <!-- 開催中スタンプラリー全件一覧モーダル -->
+<div class="modal-backdrop" id="allRalliesModal">
+  <div class="modal-sheet" style="max-height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-header">
+      <h2>開催中のスタンプラリー一覧</h2>
+      <button class="close-btn" id="closeAllRalliesModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="all-rallies-grid" id="allRalliesGrid" style="flex:1; overflow-y:auto; padding-bottom:20px;"></div>
   </div>
 </div>
 

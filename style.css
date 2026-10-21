@@ -1757,3 +1757,140 @@ body {
     display: none !important;
   }
 }
+/* ==========================================
+   スタンプラリー横並びミニチュア台紙 ＆ 一覧
+========================================== */
+.see-all-link-btn {
+  background: none;
+  border: none;
+  color: var(--primary-accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.see-all-link-btn:hover {
+  opacity: 0.8;
+}
+
+/* 横スクロールコンテナ */
+.stamp-rally-h-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  scrollbar-width: none;
+}
+.stamp-rally-h-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* 詳細画面の台紙（2:3）をそのまま縮小したミニチュアカード */
+.stamp-rally-mini-card {
+  flex: 0 0 136px;
+  width: 136px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+  transition: transform 0.15s ease;
+}
+.stamp-rally-mini-card:hover {
+  transform: translateY(-2px);
+}
+
+/* ミニチュア台紙内のスタンプ円プレビュー */
+.mini-board-circles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin: auto 0;
+}
+.mini-board-slot {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px dashed #334155;
+  background: #ffffff;
+  overflow: hidden;
+  position: relative;
+}
+.mini-board-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mini-board-slot.cleared::after {
+  content: "済";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  width: 28px;
+  height: 28px;
+  border: 2px double #dc2626;
+  color: #dc2626;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* カード下部のタイトル・進捗オーバーレイ */
+.mini-board-info {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(2px);
+  padding: 5px 6px;
+  border-radius: 4px;
+  color: #ffffff;
+  text-align: center;
+}
+.mini-board-title {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.mini-board-progress {
+  font-size: 9px;
+  color: #fbcfe0;
+  font-weight: 600;
+}
+
+/* 全件一覧モーダル用のグリッド配置 */
+.all-rallies-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  justify-items: center;
+}
+@media (min-width: 500px) {
+  .all-rallies-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.all-rallies-grid .stamp-rally-mini-card {
+  width: 100%;
+  max-width: 160px;
+}
