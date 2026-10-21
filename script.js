@@ -1078,10 +1078,23 @@ function renderPosts(items) {
 }
 
 function filterByTag(tag) {
-  document.querySelectorAll('[data-tab="tabPosts"]').forEach(el => el.click());
-  const searchInput = document.getElementById("searchInput");
-  if (searchInput) searchInput.value = tag;
-  applySortAndRender();
+  // 1. 詳細モーダルが開いていれば閉じる
+  const detailModal = document.getElementById("detailModal");
+  if (detailModal) detailModal.classList.remove("show");
+
+  // 2. 「見つける（検索）」タブへ切り替え
+  document.querySelectorAll('[data-tab="tabAccounts"]').forEach(el => el.click());
+
+  // 3. 検索タブ内の「投稿」タブをアクティブにする
+  const postsTabBtn = document.getElementById("dTabPostsBtn");
+  if (postsTabBtn) postsTabBtn.click();
+
+  // 4. 検索入力欄にハッシュタグをセットして検索を実行
+  const dInput = document.getElementById("discoverSearchInput");
+  if (dInput) {
+    dInput.value = tag;
+    dInput.dispatchEvent(new Event("input")); // 検索結果を即時更新
+  }
 }
 
 // ====================================================

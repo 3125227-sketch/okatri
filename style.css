@@ -513,15 +513,33 @@ body {
   gap: 4px;
   margin-bottom: 8px;
 }
+/* ★ 詳細モーダルなど「白背景」用のタグ（くっきり読める） */
 .tag-badge {
-  color: #fbcfe0;
+  color: var(--primary-accent);
   font-size: 11px;
-  background: rgba(240, 40, 104, 0.25);
-  backdrop-filter: blur(2px);
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-weight: 600;
+  background: #fdf2f6;
+  border: 1px solid #fbcfe0;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  border: 1px solid rgba(240, 40, 104, 0.35);
+  display: inline-block;
+  transition: all 0.15s ease;
+}
+.tag-badge:hover {
+  background: #fbcfe0;
+}
+
+/* ★ ホームの縦長写真（暗い背景）の上に乗るタグ */
+.card-overlay-tags .tag-badge {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.card-overlay-tags .tag-badge:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .card-overlay-footer {
