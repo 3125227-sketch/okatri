@@ -418,26 +418,33 @@ body {
   .spot-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; }
 }
 
+/* ==========================================
+   案A: インスタ・リール風 縦長オーバーレイカード
+========================================== */
 .spot-card {
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
+  position: relative;
+  background: #0f172a;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  transition: border-color 0.15s ease;
+  aspect-ratio: 4 / 5; /* インスタ標準の美しい縦長比率 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .spot-card:hover {
-  border-color: var(--border-focus);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
 
-.card-img-wrap {
+.card-img-wrap,
+.spot-card .carousel-container {
   width: 100%;
-  aspect-ratio: 3 / 4;
-  background: #f1f5f9;
-  overflow: hidden;
+  height: 100%;
+  aspect-ratio: 4 / 5;
+  background: #1e293b;
   position: relative;
+  overflow: hidden;
 }
 .card-img {
   width: 100%;
@@ -446,24 +453,101 @@ body {
   display: block;
 }
 
-.card-body {
-  padding: 12px;
+/* 写真の上に重ねるグラデーション（上下を暗くして文字を視認） */
+.card-overlay-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(15, 23, 42, 0.45) 0%,
+    rgba(0, 0, 0, 0) 25%,
+    rgba(0, 0, 0, 0.3) 60%,
+    rgba(15, 23, 42, 0.9) 100%
+  );
+  pointer-events: none;
   display: flex;
   flex-direction: column;
-  flex: 1;
+  justify-content: space-between;
+  padding: 12px 14px;
+  z-index: 5;
 }
-.card-area { font-size: 11px; color: var(--primary-accent); font-weight: 600; }
-.card-title { font-size: 14px; font-weight: 600; margin: 3px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
-.card-tags { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
-.tag-badge {
-  color: var(--primary-accent); font-size: 11px; background: #fdf2f6;
-  padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer;
-}
-.tag-badge:hover { background: #fbcfe0; }
 
-.card-footer-row {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-top: auto; padding-top: 8px; border-top: 1px solid #f8fafc; font-size: 12px; color: var(--text-secondary);
+/* 上部バッジ（エリア名） */
+.card-overlay-top {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  pointer-events: auto;
+}
+.card-area-badge {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+}
+
+/* 下部コンテンツ（タイトル・タグ・ユーザー・アクション） */
+.card-overlay-bottom {
+  pointer-events: auto;
+  color: #ffffff;
+}
+.card-overlay-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 4px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-overlay-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.tag-badge {
+  color: #fbcfe0;
+  font-size: 11px;
+  background: rgba(240, 40, 104, 0.25);
+  backdrop-filter: blur(2px);
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid rgba(240, 40, 104, 0.35);
+}
+
+.card-overlay-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+.card-overlay-footer .card-author-row {
+  color: #f1f5f9;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.card-overlay-footer .card-actions-row {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  gap: 14px;
+}
+.card-overlay-footer .action-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 .card-author-row { display: flex; align-items: center; gap: 6px; }
 .card-avatar-sm { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
@@ -1737,6 +1821,7 @@ body {
     border-radius: 0 !important;
     box-shadow: none !important;
     background: transparent !important;
+    aspect-ratio: 1 / 1 !important; /* ★ マイページでは綺麗な正方形（1:1）を維持 */
   }
 
   /* 写真を正方形（1:1）で綺麗に並べる */

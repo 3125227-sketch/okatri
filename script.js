@@ -3,6 +3,15 @@ const SUPABASE_URL = "https://dkbcnzrniknrvnflnytc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-R_mW2C1dAA-ODy1eg8L6g_lQ5h4DHQ";
 const GEMINI_API_KEY = "AIzaSyBUpcoiqVlF5u_PhZR64ZblNk4HU326GFs";
 
+// ★ EmailJSの設定（無料登録で取得できるキー）
+const EMAILJS_PUBLIC_KEY = "A_66hCDRYd81RE6r4"; // 例: "uXyZ_abc123..."
+const EMAILJS_SERVICE_ID = "service_31yqeua";         // 例: "service_okatari"
+const EMAILJS_TEMPLATE_ID = "template_wweeyq8";       // 例: "template_pw_reset"
+
+if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY !== "YOUR_EMAILJS_PUBLIC_KEY") {
+  emailjs.init(EMAILJS_PUBLIC_KEY);
+}
+
 // Supabaseクライアントの初期化
 const isSupabaseReady = SUPABASE_URL && SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY;
 const db = isSupabaseReady ? supabase.createClient(SUPABASE_URL.trim(), SUPABASE_ANON_KEY.trim()) : null;
@@ -140,6 +149,7 @@ let currentUploadedFiles = [];
 let currentUploadedImagesBase64 = [];
 let currentUploadedBase64 = "";
 let currentAvatarBase64 = "";
+let isFromLiveCamera = false; // ★ カメラ撮影時のみGPSを使うための判定フラグ
 let currentLatitude = 34.6618;
 let currentLongitude = 133.9350;
 let routeFilterMode = "all";
@@ -930,24 +940,49 @@ function applySortAndRender() {
 
   // ソートモードによる分岐
   if (currentSortMode === "popular") {
-    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    // メジャーエリア（岡山市各区・倉敷市）判定
+    const isMajorArea = (area = "") => {
+      return area.includes("岡山市") || area.includes("倉敷");
+    };
 
-    // ① 今週（7日以内）の投稿
-    const thisWeekList = list.filter(p => {
-      const postTime = p.created_at ? new Date(p.created_at).getTime() : Date.now();
-      return postTime >= oneWeekAgo;
-    });
-    thisWeekList.sort((a, b) => parseArray(b.likes).length - parseArray(a.likes).length);
+    // ★ ③ 保存率重視スコアの算出（いいね×1 + 保存数×2.5 + 地域ボーナス）
+    const calcScore = (post) => {
+      const likesCount = parseArray(post.likes).length;
+      // 全ユーザーのブックマークからこの投稿が保存された総数を集計
+      const bookmarksCount = allUsersData.reduce((acc, u) => {
+        return acc + (parseArray(u.bookmarks).includes(post.id) ? 1 : 0);
+      }, 0);
 
-    // ② 過去（7日より前）の投稿
-    const olderList = list.filter(p => {
-      const postTime = p.created_at ? new Date(p.created_at).getTime() : Date.now();
-      return postTime < oneWeekAgo;
-    });
-    olderList.sort((a, b) => parseArray(b.likes).length - parseArray(a.likes).length);
+      // マイナー地域（郡部・市部）には穴場発掘ボーナス +2点
+      const isMinor = !isMajorArea(post.area);
+      const localBonus = isMinor ? 2 : 0;
 
-    // 今週の投稿 ➔ 過去の投稿 の順でシームレスに結合
-    list = [...thisWeekList, ...olderList];
+      return (likesCount * 1) + (bookmarksCount * 2.5) + localBonus;
+    };
+
+    // スコア順にソート
+    const sorted = [...list].sort((a, b) => calcScore(b) - calcScore(a));
+
+    // ★ ① 市町村分散（メジャーと穴場を2件ずつ交互に差し込む）
+    const majorList = sorted.filter(p => isMajorArea(p.area));
+    const minorList = sorted.filter(p => !isMajorArea(p.area));
+
+    const interleaved = [];
+    let majIdx = 0;
+    let minIdx = 0;
+
+    while (majIdx < majorList.length || minIdx < minorList.length) {
+      // メジャーを2件追加
+      for (let i = 0; i < 2 && majIdx < majorList.length; i++) {
+        interleaved.push(majorList[majIdx++]);
+      }
+      // マイナー・穴場を2件追加
+      for (let i = 0; i < 2 && minIdx < minorList.length; i++) {
+        interleaved.push(minorList[minIdx++]);
+      }
+    }
+
+    list = interleaved;
   } else if (currentSortMode === "following") {
     // ★ フォロー中のみ
     if (!currentUser || (currentUser.following || []).length === 0) {
@@ -1008,23 +1043,27 @@ function renderPosts(items) {
     card.className = "spot-card";
     card.innerHTML = `
       ${carouselHtml}
-      <div class="card-body">
-        <div class="card-area">@${item.area}</div>
-        <div class="card-title">${item.title}</div>
-        <div class="card-tags">${tagsHtml}</div>
-        <div class="card-footer-row">
-          <div class="card-author-row" onclick="event.stopPropagation(); openUserProfile('${item.user_id}', '${item.nickname}')">
-            ${avatarHtml}
-            <span>${item.nickname || '匿名'}</span>
-            ${adminBadge}
-          </div>
-          <div class="card-actions-row">
-            <span class="action-item like-btn" style="color:${isLiked ? '#f02868' : 'inherit'};">
-              <i class="${isLiked ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}"></i> ${likes.length}
-            </span>
-            <span class="action-item bm-btn" style="color:${isBookmarked ? '#f02868' : 'inherit'};">
-              <i class="${isBookmarked ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'}"></i>
-            </span>
+      <div class="card-overlay-gradient">
+        <div class="card-overlay-top">
+          <span class="card-area-badge">@${item.area}</span>
+        </div>
+        <div class="card-overlay-bottom">
+          <div class="card-overlay-title">${item.title}</div>
+          <div class="card-overlay-tags">${tagsHtml}</div>
+          <div class="card-overlay-footer">
+            <div class="card-author-row" onclick="event.stopPropagation(); openUserProfile('${item.user_id}', '${item.nickname}')">
+              ${avatarHtml}
+              <span>${item.nickname || '匿名'}</span>
+              ${adminBadge}
+            </div>
+            <div class="card-actions-row">
+              <span class="action-item like-btn" style="color:${isLiked ? '#f02868' : '#ffffff'};">
+                <i class="${isLiked ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}"></i> ${likes.length}
+              </span>
+              <span class="action-item bm-btn" style="color:${isBookmarked ? '#f02868' : '#ffffff'};">
+                <i class="${isBookmarked ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'}"></i>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -2538,7 +2577,8 @@ function fetchBackgroundLocation() {
 // ====================================================
 // 「＋」ボタン用：カメラを直接起動（1枚）
 function handleOpenPostAction() {
-  fetchBackgroundLocation();
+  isFromLiveCamera = true; // ★ カメラ撮影フラグをON
+  fetchBackgroundLocation(); // カメラの時だけGPSを取得
   const cameraInput = document.getElementById("postCameraInput");
   if (cameraInput) {
     cameraInput.value = "";
@@ -2546,9 +2586,15 @@ function handleOpenPostAction() {
   }
 }
 
-// ホームの「アルバムから複数枚投稿」ボタン用：アルバムを開く（最大4枚）
+// ホームのボタン用：アルバムを開く（最大4枚）
 function handleOpenMultiPostAction() {
-  fetchBackgroundLocation();
+  isFromLiveCamera = false; // ★ アルバム時はGPSをOFF
+  // GPSの自動取得を行わないようにし、住所欄と案内文をリセット
+  const addrInput = document.getElementById("postAddress");
+  if (addrInput) addrInput.value = "";
+  const status = document.getElementById("geoStatus");
+  if (status) status.textContent = "※アルバム写真の場合は住所やスポット名を入力してください";
+
   const multiInput = document.getElementById("postMultiImageInput");
   if (multiInput) {
     multiInput.value = "";
@@ -2661,10 +2707,17 @@ function setupEventListeners() {
 
   // モーダル内の再選択ボタン
   safeOnClick("modalRetakeCameraBtn", () => {
+    isFromLiveCamera = true;
+    fetchBackgroundLocation(); // カメラを撮り直す時はGPSを取得
     const cIn = document.getElementById("postCameraInput");
     if (cIn) cIn.click();
   });
   safeOnClick("modalPickMultiBtn", () => {
+    isFromLiveCamera = false; // アルバムを選び直す時はGPSをOFF
+    const addrInput = document.getElementById("postAddress");
+    if (addrInput) addrInput.value = "";
+    const status = document.getElementById("geoStatus");
+    if (status) status.textContent = "※アルバム写真の場合は住所やスポット名を入力してください";
     const mIn = document.getElementById("postMultiImageInput");
     if (mIn) mIn.click();
   });
@@ -3401,13 +3454,23 @@ function setupEventListeners() {
           }
         }
 
-        // ③ それでも未取得かつスマホの場合のみ現在地GPSを使用
+        // ③ それでも未取得の場合の処理
         if (!postLat) {
-          if (isMobile) {
+          if (isFromLiveCamera && isMobile) {
+            // ★ カメラで撮影した場合のみ、現在地GPSを使用
             postLat = currentLatitude;
             postLng = currentLongitude;
+          } else if (selectedArea) {
+            // アルバム写真で住所が特定できなかった場合は、選択されたエリアの中心を使用
+            const fallbackAreaGeo = await geocodeAddress(`岡山県 ${selectedArea}`);
+            if (fallbackAreaGeo) {
+              postLat = fallbackAreaGeo.lat;
+              postLng = fallbackAreaGeo.lng;
+            } else {
+              postLat = 34.6655;
+              postLng = 133.9186;
+            }
           } else {
-            // パソコンで何も特定できなかった場合のデフォルト（岡山駅前）
             postLat = 34.6655;
             postLng = 133.9186;
           }
@@ -3513,16 +3576,38 @@ function setupEventListeners() {
     document.getElementById("authSubmitBtn").textContent = "アカウント作成";
   });
 
-  // パスワード忘れ・確認
+  // パスワード忘れ・確認（メール送信）
   safeOnClick("forgotPasswordBtn", async (e) => {
     e.preventDefault();
     const inputEmail = prompt("登録済みのメールアドレスを入力してください:");
     if (!inputEmail || inputEmail.trim() === "") return;
 
+    const targetEmail = inputEmail.trim();
+
     if (db) {
-      const { data } = await db.from("users_custom").select("user_id, nickname, password").eq("email", inputEmail.trim()).maybeSingle();
+      const { data } = await db.from("users_custom").select("user_id, nickname, password, email").eq("email", targetEmail).maybeSingle();
       if (data) {
-        alert(`【アカウント情報が見つかりました】\nユーザーID: @${data.user_id}\nパスワード: ${data.password}\n\n※この情報を控えてログインしてください。`);
+        // メール送信用パラメータ
+        const templateParams = {
+          to_email: targetEmail,
+          to_name: data.nickname || data.user_id,
+          user_id: data.user_id,
+          password: data.password
+        };
+
+        // EmailJSが設定されている場合は実際にメールを送信
+        if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY !== "YOUR_EMAILJS_PUBLIC_KEY") {
+          try {
+            await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+            alert(`📨 【メールを送信しました】\n${targetEmail} 宛にアカウント情報（ユーザーID・パスワード）をお送りしました。\nメールをご確認の上、ログインしてください。`);
+          } catch (err) {
+            console.error("メール送信エラー:", err);
+            alert("メールの送信に失敗しました。しばらく経ってから再度お試しください。");
+          }
+        } else {
+          // EmailJSキーが未設定の場合のテスト用アナウンス
+          alert(`📨 【送信完了（テスト環境）】\n${targetEmail} 宛にアカウント情報を送信しました。\n※EmailJSのキーを設定すると実際のメールアドレス宛に届くようになります。\n\n[確認用]\nID: @${data.user_id}\nPASS: ${data.password}`);
+        }
       } else {
         alert("このメールアドレスに一致するアカウントは見つかりませんでした。\n設定画面からメールアドレスを登録しているかご確認ください。");
       }
