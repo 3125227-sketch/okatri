@@ -1101,6 +1101,40 @@
     </form>
   </div>
 </div>
+  <!-- Instagram風 投稿共有モーダル -->
+<div class="modal-backdrop" id="postShareModal">
+  <div class="modal-sheet insta-share-sheet">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-header" style="justify-content:center; position:relative; margin-bottom:12px;">
+      <h3 style="font-size:15px; font-weight:700; margin:0;">シェア</h3>
+      <button class="close-btn" id="closePostShareModalBtn" style="position:absolute; right:0;"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- 1. フォロー中ユーザー一覧（DMで送信） -->
+    <div style="font-size:12px; font-weight:700; color:var(--text-secondary); margin-bottom:8px; padding-left:4px;">フォロー中のユーザーに送信</div>
+    <div class="share-users-list" id="shareFollowUsersList"></div>
+
+    <!-- 2. 外部共有ボタングループ（元々の機能も選択可能） -->
+    <div class="share-actions-row">
+      <button type="button" class="share-action-item" id="shareCopyLinkAction">
+        <div class="share-action-icon"><i class="fa-solid fa-link"></i></div>
+        <span>リンクコピー</span>
+      </button>
+      <button type="button" class="share-action-item" id="shareNativeAction">
+        <div class="share-action-icon"><i class="fa-solid fa-arrow-up-from-bracket"></i></div>
+        <span>その他アプリ</span>
+      </button>
+      <button type="button" class="share-action-item" id="shareLineAction">
+        <div class="share-action-icon" style="background:#06c755; color:#fff;"><i class="fa-brands fa-line"></i></div>
+        <span>LINE</span>
+      </button>
+      <button type="button" class="share-action-item" id="shareXAction">
+        <div class="share-action-icon" style="background:#000000; color:#fff;"><i class="fa-brands fa-x-twitter"></i></div>
+        <span>X</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>

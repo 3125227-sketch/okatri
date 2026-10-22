@@ -2347,26 +2347,9 @@ function openDetail(item) {
   // ★ 吹き出しボタンを押したら下からコメントシートを開く
   safeOnClick("openCommentsSheetBtn", () => openCommentsModal(item));
 
-  // ★ 紙飛行機ボタンを押したらOSの「リンクを共有」画面を直接起動
-  safeOnClick("sharePostPlaneBtn", async () => {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const postUrl = `${baseUrl}?post=${encodeURIComponent(item.id)}`;
-    const shareData = {
-      title: `【OKATRI】${item.title}`,
-      text: `岡山のスポット「${item.title}」(@${item.area}) #オカトリ #岡山旅行`,
-      url: postUrl
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        // キャンセル時は何もしない
-      }
-    } else {
-      if (navigator.clipboard) navigator.clipboard.writeText(postUrl);
-      alert(`投稿のURLをコピーしました！\n${postUrl}`);
-    }
+  // ★ 紙飛行機ボタンを押したらInstagram風シェアモーダルを開く
+  safeOnClick("sharePostPlaneBtn", () => {
+    openPostShareModal(item);
   });
 
   safeOnClick("openEditPostBtn", () => openEditPostModal(item));
@@ -3804,19 +3787,24 @@ function setupEventListeners() {
     const msg = input.value.trim();
     if (!msg || !currentUser || !currentDmTargetUserId) return;
 
+    const msgId = generateUniqueId("msg");
     const list = document.getElementById("dmPageMessageList");
     if (list) {
-      const bubble = document.createElement("div");
-      bubble.className = "dm-bubble mine";
-      bubble.textContent = msg;
-      list.appendChild(bubble);
+      // ★ 送信した瞬間も右寄せ枠（dm-bubble-wrap mine）で包む
+      const wrap = document.createElement("div");
+      wrap.className = "dm-bubble-wrap mine";
+      wrap.innerHTML = `
+        <button class="dm-bubble-delete-btn" onclick="deleteMessage('${msgId}')" title="削除"><i class="fa-regular fa-trash-can"></i></button>
+        <div class="dm-bubble mine">${msg}</div>
+      `;
+      list.appendChild(wrap);
       list.scrollTop = list.scrollHeight;
     }
     input.value = "";
 
     if (db) {
       await db.from("messages").insert([{
-        id: generateUniqueId("msg"),
+        id: msgId,
         from_user_id: currentUser.userId,
         to_user_id: currentDmTargetUserId,
         message: msg
@@ -4295,13 +4283,19 @@ function renderDmSpotPickerList(query = "") {
   if (!container) return;
   container.innerHTML = "";
 
-  let list = postsData;
+  // ★ 自分が保存（ブックマーク）しているスポットのみに絞り込み
+  const myBookmarks = (currentUser && currentUser.bookmarks) || [];
+  let list = postsData.filter(p => myBookmarks.includes(p.id));
+
   if (query) {
     list = list.filter(p => p.title.toLowerCase().includes(query) || (p.area || "").includes(query));
   }
 
   if (list.length === 0) {
-    container.innerHTML = `<div class="empty-state">該当するスポットがありません</div>`;
+    const emptyMsg = myBookmarks.length === 0
+      ? "保存済みのスポットがありません。<br>投稿のしおりボタン（保存）を押したスポットがここに表示されます。"
+      : "該当するスポットがありません";
+    container.innerHTML = `<div class="empty-state" style="line-height:1.6; padding:24px 10px;">${emptyMsg}</div>`;
     return;
   }
 
@@ -4338,10 +4332,105 @@ function renderDmSpotPickerList(query = "") {
 }
 
 const dmSpotSearch = document.getElementById("dmSpotSearchInput");
-if (dmSpotSearch) {
-  dmSpotSearch.oninput = (e) => renderDmSpotPickerList(e.target.value.toLowerCase().trim());
-}
-} // ← setupEventListeners() 関数の正しい閉じカッコ
+  if (dmSpotSearch) {
+    dmSpotSearch.oninput = (e) => renderDmSpotPickerList(e.target.value.toLowerCase().trim());
+  }
+} // ← ★ setupEventListeners() はここで閉じます
+
+// ★ 関数の外側に配置してどこからでも呼び出せるようにする
+window.openPostShareModal = function(post) {
+  const modal = document.getElementById("postShareModal");
+  const usersList = document.getElementById("shareFollowUsersList");
+  if (!modal || !usersList) return;
+
+  const baseUrl = window.location.origin + window.location.pathname;
+  const postUrl = `${baseUrl}?post=${encodeURIComponent(post.id)}`;
+
+  // 1. フォロー中ユーザーの読み込み
+  usersList.innerHTML = "";
+  const myFollowing = (currentUser && currentUser.following) || [];
+
+  if (!currentUser) {
+    usersList.innerHTML = `<div style="font-size:12px; color:var(--text-muted); padding:10px 4px;">ログインすると友達にDM送信できます</div>`;
+  } else if (myFollowing.length === 0) {
+    usersList.innerHTML = `<div style="font-size:12px; color:var(--text-muted); padding:10px 4px;">フォロー中のユーザーがいません</div>`;
+  } else {
+    myFollowing.forEach(targetId => {
+      const u = allUsersData.find(x => x.user_id === targetId) || { user_id: targetId, nickname: "ユーザー" };
+      const avSrc = u.avatar || 'https://via.placeholder.com/50';
+
+      const item = document.createElement("div");
+      item.className = "share-user-item";
+      item.innerHTML = `
+        <img src="${avSrc}" class="share-user-avatar" onerror="this.src='https://via.placeholder.com/50'">
+        <div class="share-user-name">${u.nickname}</div>
+        <button type="button" class="share-user-send-pill">送信</button>
+      `;
+
+      // 「送信」ボタンを押したときのDM送信処理
+      const sendBtn = item.querySelector("button");
+      sendBtn.onclick = async () => {
+        sendBtn.textContent = "送信中...";
+        const shareMsg = `[SPOT_SHARE:${post.id}]`;
+        if (db) {
+          await db.from("messages").insert([{
+            id: generateUniqueId("msg"),
+            from_user_id: currentUser.userId,
+            to_user_id: targetId,
+            message: shareMsg
+          }]);
+        }
+        await sendNotification(targetId, 'message', null, `📍 ${post.title} を共有しました`);
+        sendBtn.textContent = "送信済";
+        sendBtn.classList.add("sent");
+      };
+
+      usersList.appendChild(item);
+    });
+  }
+
+  // 2. 下部アクションボタンの設定（元々の機能）
+  // リンクをコピー
+  safeOnClick("shareCopyLinkAction", () => {
+    if (navigator.clipboard) navigator.clipboard.writeText(postUrl);
+    alert(`投稿のURLをコピーしました！\n${postUrl}`);
+  });
+
+  // その他アプリで共有（OSネイティブ共有）
+  safeOnClick("shareNativeAction", async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `【OKATRI】${post.title}`,
+          text: `岡山のスポット「${post.title}」(@${post.area}) #オカトリ #岡山旅行`,
+          url: postUrl
+        });
+      } catch (err) {}
+    } else {
+      if (navigator.clipboard) navigator.clipboard.writeText(postUrl);
+      alert(`投稿のURLをコピーしました！\n${postUrl}`);
+    }
+  });
+
+  // LINEで送る
+  safeOnClick("shareLineAction", () => {
+    const text = `【OKATRI】${post.title} (@${post.area})\n${postUrl}`;
+    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(text)}`, '_blank');
+  });
+
+  // Xでシェア
+  safeOnClick("shareXAction", () => {
+    const text = `【OKATRI】岡山のスポット「${post.title}」(@${post.area}) #オカトリ #岡山観光`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(postUrl)}`, '_blank');
+  });
+
+  // 閉じるボタン
+  safeOnClick("closePostShareModalBtn", () => {
+    modal.classList.remove("show");
+  });
+
+  modal.classList.add("show");
+};
 
 // アプリ起動
 initApp();
