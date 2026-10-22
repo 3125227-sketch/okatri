@@ -684,18 +684,102 @@ body {
 .user-search-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; font-size: 16px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; color: #64748b; flex-shrink: 0; }
 .user-search-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-/* DM専用ページ */
-.dm-page-wrapper {
-  display: flex; flex-direction: column; height: calc(100vh - 120px);
-  background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px;
+/* ==========================================
+   DM専用ページ（余白ゼロ・フルフィットUI）
+========================================== */
+#tabDm.active {
+  margin: -16px; /* スマホ時の親画面の余白を相殺して画面端まで広げる */
 }
-.dm-page-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; margin-bottom: 10px; }
-.dm-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
-.dm-bubble { font-size: 13px; padding: 8px 12px; border-radius: var(--radius-md); max-width: 75%; }
-.dm-bubble.mine { background: var(--primary-accent); color: #fff; align-self: flex-end; }
-.dm-bubble.theirs { background: #e2e8f0; color: var(--text-primary); align-self: flex-start; }
-.dm-input-row { display: flex; gap: 8px; margin-top: 10px; }
-.dm-input-row input { flex: 1; padding: 9px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); font-size: 13px; outline: none; }
+@media (min-width: 900px) {
+  #tabDm.active {
+    margin: -24px 0 0 0;
+  }
+}
+
+.dm-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
+  background: var(--bg-surface);
+  border: none;
+  border-radius: 0;
+  padding: 0; /* 外枠の余白を完全撤廃 */
+  overflow: hidden;
+}
+
+/* 上部ヘッダー（相手の名前・戻るボタン） */
+.dm-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  margin: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+/* メッセージ一覧エリア（画面端まで広げてスッキリ） */
+.dm-messages {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f8fafc;
+  border: none;
+  border-radius: 0; /* 囲み枠をなくす */
+}
+
+/* 吹き出しの余白・サイズ感 */
+.dm-bubble {
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 8px 12px;
+  border-radius: 16px;
+  max-width: 78%;
+  word-break: break-word;
+}
+.dm-bubble.mine {
+  background: var(--primary-accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.dm-bubble.theirs {
+  background: #ffffff;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-bottom-left-radius: 4px;
+}
+
+/* 下部入力バー（画面下部にぴったり密着） */
+.dm-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) 12px;
+  margin: 0;
+  background: #ffffff;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.dm-input-row input {
+  flex: 1;
+  padding: 9px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  font-size: 13px;
+  outline: none;
+  background: #f1f5f9;
+}
+.dm-input-row input:focus {
+  background: #ffffff;
+  border-color: var(--primary-accent);
+}
 
 /* オカトリについて */
 .about-page-card {
@@ -1324,13 +1408,31 @@ body {
 }
 
 /* ==========================================
-   【アップデート】スマホ版 投稿グリッドを1列（大きく表示）に変更
+   【アップデート】スマホ版 投稿を画面端までフルワイド表示
 ========================================== */
 .spot-grid {
   display: grid;
-  grid-template-columns: 1fr; /* スマホ時は1列で大きく見せる */
+  grid-template-columns: 1fr;
   gap: 16px;
 }
+
+/* スマホ表示時（〜649px）: ホームの投稿を左右の画面端まで100%密着 */
+@media (max-width: 649px) {
+  #tabPosts .spot-grid {
+    margin-left: -16px;
+    margin-right: -16px;
+    width: calc(100% + 32px); /* 画面の左右余白を相殺して端まで広げる */
+    gap: 12px; /* 投稿と投稿の間の上下の隙間 */
+  }
+
+  #tabPosts .spot-card {
+    border-radius: 0 !important; /* 端まで密着するため左右の角丸をオフ */
+    border-left: none !important;  /* 左右の枠線をオフ */
+    border-right: none !important;
+    box-shadow: none !important;
+  }
+}
+
 @media (min-width: 650px) {
   .spot-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
 }
@@ -1996,4 +2098,243 @@ body {
 .all-rallies-grid .stamp-rally-mini-card {
   width: 100%;
   max-width: 160px;
+}
+/* ==========================================
+   スタンプ・削除・スポット共有スタイル
+========================================== */
+.dm-tool-btn {
+  background: none;
+  border: none;
+  font-size: 19px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+.dm-tool-btn:hover {
+  color: var(--primary-accent);
+  background: #f1f5f9;
+}
+
+/* ==========================================
+   画像スタンプ（端から端までフルワイドパネル）
+========================================== */
+.sticker-picker-popup {
+  position: absolute;
+  bottom: 100%; /* 入力バーの真上にピタッとくっつく */
+  left: 0;
+  right: 0;
+  width: 100% !important; /* 画面の左端から右端まで100%広げる */
+  max-width: 100% !important;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0; /* 上部のみ丸みをつける */
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+  padding: 12px 14px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* スタンプ上部の種類別（カテゴリ）切り替えタブ */
+.sticker-cat-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sticker-cat-tabs::-webkit-scrollbar { display: none; }
+.sticker-cat-btn {
+  background: #f1f5f9;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.sticker-cat-btn.active {
+  background: var(--primary-accent);
+  color: #ffffff;
+}
+
+/* スタンプ一覧グリッド（端から端まで均等に広く配置） */
+.sticker-grid-area {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr); /* スマホで押しやすい5列配置 */
+  gap: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 2px 8px 2px;
+}
+@media (min-width: 600px) {
+  .sticker-grid-area {
+    grid-template-columns: repeat(6, 1fr); /* 画面が広いときは6列配置 */
+  }
+}
+.sticker-item-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.sticker-item-btn:hover {
+  transform: scale(1.15);
+  background: #fdf2f6;
+}
+.sticker-item-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* コメント欄に投稿されたスタンプ画像（文字より大きく透過） */
+.comment-sticker-img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  display: block;
+  margin-top: 6px;
+  background: transparent;
+}
+
+/* チャット（DM）内のスタンプ画像（吹き出し枠をなくしてスタンプだけ大きく表示） */
+.dm-sticker-img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  display: block;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.dm-sticker-img:hover {
+  transform: scale(1.05);
+}
+.dm-bubble-wrap .dm-bubble.sticker-bubble {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* コメント削除リンク */
+.wear-comment-delete {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.wear-comment-delete:hover {
+  color: #ef4444;
+}
+
+/* メッセージのラッパー ＆ 削除ボタン（スマホでも押せるよう常時表示） */
+.dm-bubble-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.dm-bubble-wrap.mine {
+  justify-content: flex-end;
+}
+.dm-bubble-wrap.theirs {
+  justify-content: flex-start;
+}
+.dm-bubble-delete-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+.dm-bubble-delete-btn:hover {
+  color: #ef4444;
+}
+
+/* ★ 公式用: スタンプピッカー内のスタンプ削除「×」ボタン */
+.sticker-item-btn {
+  position: relative !important;
+}
+.sticker-del-x-btn {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.sticker-del-x-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+/* メッセージ内の行きたい場所共有カード */
+.dm-spot-card {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+  max-width: 220px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  text-align: left;
+}
+.dm-spot-card img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+}
+.dm-spot-card-body {
+  padding: 8px 10px;
+}
+.dm-spot-card-area {
+  font-size: 10px;
+  color: var(--primary-accent);
+  font-weight: 700;
+}
+.dm-spot-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 2px 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

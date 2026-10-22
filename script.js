@@ -49,6 +49,112 @@ function safeOnClick(id, handler) {
   const el = document.getElementById(id);
   if (el) el.onclick = handler;
 }
+// ★ 公式登録スタンプ一覧（元々のサンプルは全削除）
+let masterStickersData = JSON.parse(localStorage.getItem("okatari_custom_stickers") || "[]");
+
+// スタンプ判定ヘルパー
+function isStickerFormat(text) {
+  return typeof text === 'string' && text.startsWith('[STICKER:') && text.endsWith(']');
+}
+function extractStickerUrl(text) {
+  return text.slice(9, -1).trim();
+}
+
+// ★ 種類別（カテゴリ）タブ付きスタンプピッカーのHTML生成関数
+function setupStickerPicker(pickerEl, onSelect) {
+  if (!pickerEl) return;
+  pickerEl.innerHTML = "";
+
+  // スタンプがまだ1件も登録されていない場合
+  if (!masterStickersData || masterStickersData.length === 0) {
+    pickerEl.innerHTML = `
+      <div style="text-align:center; padding:24px 10px; font-size:12px; color:var(--text-muted); line-height:1.6;">
+        スタンプはまだ登録されていません。<br>
+        ${currentUser && currentUser.is_admin ? '<b style="color:var(--primary-accent);">図鑑タブの「スタンプ追加」から追加してください。</b>' : '公式のスタンプ公開をお待ちください。'}
+      </div>
+    `;
+    return;
+  }
+
+  // 全カテゴリを抽出
+  const categories = [...new Set(masterStickersData.map(s => s.category || "その他"))];
+  let currentCategory = categories[0];
+
+  // 上部タブコンテナ
+  const tabsWrap = document.createElement("div");
+  tabsWrap.className = "sticker-cat-tabs";
+
+  // 下部スタンプ一覧コンテナ
+  const gridArea = document.createElement("div");
+  gridArea.className = "sticker-grid-area";
+
+  function renderGrid(cat) {
+    gridArea.innerHTML = "";
+    const list = masterStickersData.filter(s => (s.category || "その他") === cat);
+    list.forEach(st => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sticker-item-btn";
+      btn.title = st.name || "";
+      
+      // ★ 公式アカウントなら削除できる「×」ボタンを表示
+      const isOfficial = currentUser && currentUser.is_admin;
+      const delBtnHtml = isOfficial ? `<span class="sticker-del-x-btn" title="このスタンプを登録削除">×</span>` : '';
+
+      btn.innerHTML = `
+        ${delBtnHtml}
+        <img src="${st.image_url}" alt="${st.name || 'stamp'}">
+      `;
+
+      // 「×」ボタンを押したときはスタンプそのものを削除
+      if (isOfficial) {
+        const delBtn = btn.querySelector(".sticker-del-x-btn");
+        if (delBtn) {
+          delBtn.onclick = async (e) => {
+            e.stopPropagation();
+            if (!confirm(`スタンプ「${st.name || 'このスタンプ'}」を完全に削除しますか？`)) return;
+            // ローカルから削除
+            masterStickersData = masterStickersData.filter(x => x.id !== st.id);
+            localStorage.setItem("okatari_custom_stickers", JSON.stringify(masterStickersData));
+            // Supabaseからも削除
+            if (db) {
+              await db.from("stickers_master").delete().eq("id", st.id);
+            }
+            // 再描画
+            renderGrid(cat);
+          };
+        }
+      }
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        onSelect(st.image_url);
+        pickerEl.style.display = "none";
+      };
+      gridArea.appendChild(btn);
+    });
+  }
+
+  // タブボタンの生成
+  categories.forEach(cat => {
+    const tabBtn = document.createElement("button");
+    tabBtn.type = "button";
+    tabBtn.className = `sticker-cat-btn ${cat === currentCategory ? 'active' : ''}`;
+    tabBtn.textContent = cat;
+    tabBtn.onclick = (e) => {
+      e.stopPropagation();
+      tabsWrap.querySelectorAll(".sticker-cat-btn").forEach(b => b.classList.remove("active"));
+      tabBtn.classList.add("active");
+      currentCategory = cat;
+      renderGrid(cat);
+    };
+    tabsWrap.appendChild(tabBtn);
+  });
+
+  pickerEl.appendChild(tabsWrap);
+  pickerEl.appendChild(gridArea);
+  renderGrid(currentCategory);
+}
 
 // ★ 追加: 説明文からハッシュタグを自動抽出（全角スペース「　」や全角「＃」にも対応）
 function extractTagsFromText(text) {
@@ -204,7 +310,7 @@ async function initApp() {
     };
 
     try {
-      const [users, comments, pickups, news, aiSpots, badges, about, rallies, routes] = await Promise.all([
+      const [users, comments, pickups, news, aiSpots, badges, about, rallies, routes, dbStickers] = await Promise.all([
         safeFetch(db.from("users_custom").select("*"), []),
         safeFetch(db.from("comments").select("*").order("created_at", { ascending: true }), []),
         safeFetch(db.from("pickups").select("*"), []),
@@ -213,8 +319,15 @@ async function initApp() {
         safeFetch(db.from("achievements_master").select("*"), []),
         safeFetch(db.from("app_about").select("*").eq("id", "about_main").maybeSingle(), null),
         safeFetch(db.from("stamp_rallies").select("*").eq("active", true), []),
-        safeFetch(db.from("shared_routes").select("*").order("created_at", { ascending: false }), []) // ★ Supabaseからルート一覧を取得
+        safeFetch(db.from("shared_routes").select("*").order("created_at", { ascending: false }), []),
+        safeFetch(db.from("stickers_master").select("*"), []) // ★ Supabaseから画像スタンプを取得
       ]);
+
+      // DBにスタンプが登録されていればローカルとマージして保存
+      if (dbStickers && dbStickers.length > 0) {
+        masterStickersData = dbStickers;
+        localStorage.setItem("okatari_custom_stickers", JSON.stringify(dbStickers));
+      }
 
       if (users) allUsersData = users;
       if (comments) commentsData = comments;
@@ -384,6 +497,26 @@ async function uploadBgImageToStorage(file) {
     }
   } catch (err) {
     console.warn("台紙画像のアップロード失敗:", err);
+  }
+  return "";
+}
+// ★ スタンプ画像をSupabase Storageに保存する関数
+async function uploadStickerImageToStorage(file) {
+  if (!db || !file) return "";
+  try {
+    const fileName = `sticker_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.png`;
+    const filePath = `stickers/${fileName}`;
+
+    const { error: uploadError } = await db.storage
+      .from('post_images')
+      .upload(filePath, file, { contentType: file.type || 'image/png', upsert: false });
+
+    if (!uploadError) {
+      const { data } = db.storage.from('post_images').getPublicUrl(filePath);
+      return data.publicUrl;
+    }
+  } catch (err) {
+    console.warn("スタンプ画像アップロードエラー:", err);
   }
   return "";
 }
@@ -1488,10 +1621,48 @@ async function openDmChatPage(targetUserId, targetNickname) {
       list.innerHTML = `<div style="text-align:center; font-size:13px; color:#94a3b8; padding:32px 0;">まだメッセージはありません。</div>`;
     } else {
       data.forEach(m => {
-        const bubble = document.createElement("div");
-        bubble.className = `dm-bubble ${m.from_user_id === currentUser.userId ? 'mine' : 'theirs'}`;
-        bubble.textContent = m.message;
-        list.appendChild(bubble);
+        const wrap = document.createElement("div");
+        const isMine = m.from_user_id === currentUser.userId;
+        wrap.className = `dm-bubble-wrap ${isMine ? 'mine' : 'theirs'}`;
+
+        // ★ 行きたい場所（スポット共有）メッセージかどうか判定
+        if (m.message && m.message.startsWith("[SPOT_SHARE:")) {
+          const spotId = m.message.replace("[SPOT_SHARE:", "").replace("]", "").trim();
+          const spot = postsData.find(p => p.id === spotId);
+          if (spot) {
+            const mainImg = (spot.images && spot.images[0]) || spot.image_url;
+            wrap.innerHTML = `
+              ${isMine ? `<button class="dm-bubble-delete-btn" onclick="deleteMessage('${m.id}')" title="削除"><i class="fa-regular fa-trash-can"></i></button>` : ''}
+              <div class="dm-spot-card" onclick="openDetailFromMap('${spot.id}')">
+                <img src="${mainImg}" onerror="this.src='https://via.placeholder.com/200'">
+                <div class="dm-spot-card-body">
+                  <div class="dm-spot-card-area">📍 行きたい場所</div>
+                  <div class="dm-spot-card-title">${spot.title}</div>
+                  <div style="font-size:11px; color:var(--text-secondary);">@${spot.area}</div>
+                </div>
+              </div>
+            `;
+            list.appendChild(wrap);
+            return;
+          }
+        }
+
+        // スタンプメッセージか通常のテキストメッセージかを判定
+        if (isStickerFormat(m.message)) {
+          const sUrl = extractStickerUrl(m.message);
+          wrap.innerHTML = `
+            ${isMine ? `<button class="dm-bubble-delete-btn" onclick="deleteMessage('${m.id}')" title="削除"><i class="fa-regular fa-trash-can"></i></button>` : ''}
+            <div class="dm-bubble sticker-bubble ${isMine ? 'mine' : 'theirs'}">
+              <img src="${sUrl}" class="dm-sticker-img" alt="stamp">
+            </div>
+          `;
+        } else {
+          wrap.innerHTML = `
+            ${isMine ? `<button class="dm-bubble-delete-btn" onclick="deleteMessage('${m.id}')" title="削除"><i class="fa-regular fa-trash-can"></i></button>` : ''}
+            <div class="dm-bubble ${isMine ? 'mine' : 'theirs'}">${m.message}</div>
+          `;
+        }
+        list.appendChild(wrap);
       });
       list.scrollTop = list.scrollHeight;
     }
@@ -2293,7 +2464,9 @@ function renderCommentTreeHtml(rootComments, allComments, postAuthorUserId) {
               <span class="wear-comment-author">${r.nickname}</span>
               ${rIsAuthor ? '<span class="wear-author-tag">・投稿者</span>' : ''}
             </div>
-            <div class="wear-comment-text">${r.comment}</div>
+            <div class="wear-comment-text">
+              ${isStickerFormat(r.comment) ? `<img src="${extractStickerUrl(r.comment)}" class="comment-sticker-img">` : r.comment}
+            </div>
           </div>
           <div class="wear-comment-like"><i class="fa-regular fa-heart"></i></div>
         </div>
@@ -2308,9 +2481,15 @@ function renderCommentTreeHtml(rootComments, allComments, postAuthorUserId) {
             <span class="wear-comment-author">${c.nickname}</span>
             ${isAuthor ? '<span class="wear-author-tag">・投稿者</span>' : ''}
           </div>
-          <div class="wear-comment-text">${c.comment}</div>
+          <!-- ★ ここをスタンプ判定付きの書き方に変更します -->
+          <div class="wear-comment-text">
+            ${isStickerFormat(c.comment) ? `<img src="${extractStickerUrl(c.comment)}" class="comment-sticker-img">` : c.comment}
+          </div>
           <div class="wear-comment-actions">
             <span class="wear-reply-link" onclick="setReplyTarget('${c.id}', '${c.nickname}')">返信</span>
+            ${currentUser && currentUser.userId === c.user_id ? `
+              <span class="wear-comment-delete" onclick="deleteComment('${c.id}')"><i class="fa-regular fa-trash-can"></i> 削除</span>
+            ` : ''}
           </div>
         </div>
         <div class="wear-comment-like"><i class="fa-regular fa-heart"></i></div>
@@ -2323,6 +2502,17 @@ function renderCommentTreeHtml(rootComments, allComments, postAuthorUserId) {
 // ====================================================
 // ★ コメント専用ボトムシート表示＆送信処理
 // ====================================================
+// ★ コメント削除関数
+async function deleteComment(commentId) {
+  if (!confirm("このコメントを削除しますか？")) return;
+  commentsData = commentsData.filter(c => c.id !== commentId && c.parent_id !== commentId);
+  if (currentActiveDetailPost) {
+    openCommentsModal(currentActiveDetailPost);
+  }
+  if (db) {
+    await db.from("comments").delete().or(`id.eq.${commentId},parent_id.eq.${commentId}`);
+  }
+}
 function openCommentsModal(post) {
   const modal = document.getElementById("postCommentsModal");
   const list = document.getElementById("postCommentsModalList");
@@ -2382,6 +2572,32 @@ function openCommentsModal(post) {
       await db.from("comments").insert([newCmt]);
       sendNotification(post.user_id, 'comment', post.id, post.title);
     }
+  });
+
+  // ★ コメントスタンプピッカーのセットアップ（画像スタンプ送信）
+  const cPicker = document.getElementById("commentStickerPicker");
+  setupStickerPicker(cPicker, async (stickerUrl) => {
+    const newCmt = {
+      id: generateUniqueId("cmt"),
+      post_id: post.id,
+      user_id: currentUser ? currentUser.userId : "guest",
+      nickname: currentUser ? currentUser.nickname : "匿名",
+      comment: `[STICKER:${stickerUrl}]`,
+      parent_id: currentReplyingCommentId
+    };
+    commentsData.push(newCmt);
+    currentReplyingCommentId = null;
+    cancelReplyTarget();
+    renderList();
+    if (db) {
+      await db.from("comments").insert([newCmt]);
+      sendNotification(post.user_id, 'comment', post.id, post.title);
+    }
+  });
+
+  safeOnClick("openCommentStickerBtn", (e) => {
+    e.stopPropagation();
+    if (cPicker) cPicker.style.display = cPicker.style.display === "none" ? "grid" : "none";
   });
 }
 
@@ -2878,6 +3094,128 @@ function setupEventListeners() {
   // 公式ボタン
   safeOnClick("openCreateBadgeModalBtn", () => document.getElementById("createBadgeModal").classList.add("show"));
   safeOnClick("openCreateRallyModalBtn", openCreateRallyModal);
+
+  // ★ 公式スタンプ追加モーダルを開く
+  safeOnClick("openCreateStickerModalBtn", () => {
+    // 既存のカテゴリ一覧をサジェストにセット
+    const datalist = document.getElementById("stickerCategoryDatalist");
+    if (datalist) {
+      const cats = [...new Set(masterStickersData.map(s => s.category || "その他"))];
+      datalist.innerHTML = cats.map(c => `<option value="${c}">`).join('');
+    }
+    const prev = document.getElementById("stickerPreviewBox");
+    if (prev) prev.innerHTML = "";
+    document.getElementById("createStickerForm").reset();
+    document.getElementById("createStickerModal").classList.add("show");
+  });
+  safeOnClick("closeCreateStickerModalBtn", () => document.getElementById("createStickerModal").classList.remove("show"));
+  safeOnClick("cancelCreateStickerBtn", () => document.getElementById("createStickerModal").classList.remove("show"));
+
+  // スタンプ画像の選択時プレビュー
+  const stickerFileInput = document.getElementById("stickerFileInput");
+  if (stickerFileInput) {
+    stickerFileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const prev = document.getElementById("stickerPreviewBox");
+        if (prev) {
+          prev.innerHTML = `<img src="${evt.target.result}" style="width:90px; height:90px; object-fit:contain; background:#f1f5f9; border-radius:8px; padding:6px; border:1px dashed #cbd5e1;">`;
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+  }
+
+  // スタンプ作成フォーム送信処理
+  const stickerForm = document.getElementById("createStickerForm");
+  if (stickerForm) {
+    stickerForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById("submitCreateStickerBtn");
+      if (submitBtn) { submitBtn.textContent = "アップロード中..."; submitBtn.disabled = true; }
+
+      const fileIn = document.getElementById("stickerFileInput");
+      const nameIn = document.getElementById("stickerNameInput");
+      const catIn = document.getElementById("stickerCategoryInput");
+
+      const file = fileIn && fileIn.files && fileIn.files[0];
+      if (!file) {
+        alert("画像ファイルを選択してください。");
+        if (submitBtn) { submitBtn.textContent = "スタンプを公開"; submitBtn.disabled = false; }
+        return;
+      }
+
+      // Storageへアップロード
+      const uploadedUrl = await uploadStickerImageToStorage(file);
+      if (!uploadedUrl) {
+        alert("画像の保存に失敗しました。SupabaseのStorage設定をご確認ください。");
+        if (submitBtn) { submitBtn.textContent = "スタンプを公開"; submitBtn.disabled = false; }
+        return;
+      }
+
+      const category = (catIn ? catIn.value.trim() : "") || "その他";
+      const name = (nameIn ? nameIn.value.trim() : "") || "スタンプ";
+
+      const newSticker = {
+        id: generateUniqueId("stk"),
+        category: category,
+        name: name,
+        image_url: uploadedUrl,
+        created_at: new Date().toISOString()
+      };
+
+      // 1. ローカルストレージに即時保存（リロードしても消えない）
+      masterStickersData.push(newSticker);
+      localStorage.setItem("okatari_custom_stickers", JSON.stringify(masterStickersData));
+
+      // 2. Supabaseテーブルにも保存
+      if (db) {
+        try {
+          const { error } = await db.from("stickers_master").insert([newSticker]);
+          if (error) console.warn("DBスタンプ保存エラー（ローカルで動作します）:", error.message);
+        } catch(err) {
+          console.warn("DB通信エラー:", err);
+        }
+      }
+
+      // 3. ★ 開いているDMチャット用ピッカーを即時更新
+      const dmPickerEl = document.getElementById("dmStickerPicker");
+      if (dmPickerEl) {
+        setupStickerPicker(dmPickerEl, async (stickerUrl) => {
+          if (!currentUser || !currentDmTargetUserId) return;
+          const stickerMsg = `[STICKER:${stickerUrl}]`;
+          const list = document.getElementById("dmPageMessageList");
+          if (list) {
+            const wrap = document.createElement("div");
+            wrap.className = "dm-bubble-wrap mine";
+            wrap.innerHTML = `<div class="dm-bubble sticker-bubble mine"><img src="${stickerUrl}" class="dm-sticker-img" alt="stamp"></div>`;
+            list.appendChild(wrap);
+            list.scrollTop = list.scrollHeight;
+          }
+          if (db) {
+            await db.from("messages").insert([{
+              id: generateUniqueId("msg"),
+              from_user_id: currentUser.userId,
+              to_user_id: currentDmTargetUserId,
+              message: stickerMsg
+            }]);
+          }
+          await sendNotification(currentDmTargetUserId, 'message', null, `スタンプを送信しました`);
+        });
+      }
+
+      // 4. コメント用のピッカーも再初期化
+      if (currentActiveDetailPost) {
+        openCommentsModal(currentActiveDetailPost);
+      }
+
+      alert(`🎉 新しいスタンプ「${name}」（種類: ${category}）を追加しました！\nコメントやDMですぐに使用できます。`);
+      if (submitBtn) { submitBtn.textContent = "スタンプを公開"; submitBtn.disabled = false; }
+      document.getElementById("createStickerModal").classList.remove("show");
+    };
+  }
 
   // ルートシェア
   safeOnClick("shareRouteXBtn", () => {
@@ -3895,6 +4233,114 @@ function setupEventListeners() {
     if (uSec) uSec.style.display = "none";
     renderAnnouncements();
   });
+  　// ★ メッセージ削除関数
+window.deleteMessage = async function(messageId) {
+  if (!confirm("このメッセージを削除しますか？")) return;
+  if (db) {
+    await db.from("messages").delete().eq("id", messageId);
+  }
+  // 再読み込み
+  const titleText = document.getElementById("dmPageTitle").textContent;
+  openDmChatPage(currentDmTargetUserId, titleText.split(" ")[0]);
+};
+
+// ★ DMスタンプピッカーのセットアップ（画像スタンプ送信）
+const dmPicker = document.getElementById("dmStickerPicker");
+setupStickerPicker(dmPicker, async (stickerUrl) => {
+  if (!currentUser || !currentDmTargetUserId) return;
+  const stickerMsg = `[STICKER:${stickerUrl}]`;
+  const msgId = generateUniqueId("msg");
+
+  const list = document.getElementById("dmPageMessageList");
+  if (list) {
+    const wrap = document.createElement("div");
+    wrap.className = "dm-bubble-wrap mine";
+    wrap.innerHTML = `
+      <button class="dm-bubble-delete-btn" onclick="deleteMessage('${msgId}')" title="削除"><i class="fa-regular fa-trash-can"></i></button>
+      <div class="dm-bubble sticker-bubble mine">
+        <img src="${stickerUrl}" class="dm-sticker-img" alt="stamp">
+      </div>
+    `;
+    list.appendChild(wrap);
+    list.scrollTop = list.scrollHeight;
+  }
+  if (db) {
+    await db.from("messages").insert([{
+      id: msgId,
+      from_user_id: currentUser.userId,
+      to_user_id: currentDmTargetUserId,
+      message: stickerMsg
+    }]);
+  }
+  await sendNotification(currentDmTargetUserId, 'message', null, `スタンプを送信しました`);
+});
+
+safeOnClick("openDmStickerBtn", (e) => {
+  e.stopPropagation();
+  if (dmPicker) dmPicker.style.display = dmPicker.style.display === "none" ? "grid" : "none";
+});
+
+// ★ 行きたい場所共有モーダルの開閉 ＆ 選択送信処理
+safeOnClick("openDmShareSpotBtn", () => {
+  if (!currentUser) { alert("ログインが必要です"); return; }
+  renderDmSpotPickerList();
+  document.getElementById("dmSpotPickerModal").classList.add("show");
+});
+safeOnClick("closeDmSpotPickerModalBtn", () => {
+  document.getElementById("dmSpotPickerModal").classList.remove("show");
+});
+
+function renderDmSpotPickerList(query = "") {
+  const container = document.getElementById("dmSpotPickerList");
+  if (!container) return;
+  container.innerHTML = "";
+
+  let list = postsData;
+  if (query) {
+    list = list.filter(p => p.title.toLowerCase().includes(query) || (p.area || "").includes(query));
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `<div class="empty-state">該当するスポットがありません</div>`;
+    return;
+  }
+
+  list.forEach(p => {
+    const mainImg = (p.images && p.images[0]) || p.image_url;
+    const row = document.createElement("div");
+    row.className = "user-list-row";
+    row.innerHTML = `
+      <img src="${mainImg}" style="width:40px; height:40px; border-radius:6px; object-fit:cover;">
+      <div style="flex:1;">
+        <div style="font-weight:700; font-size:13px;">${p.title}</div>
+        <div style="font-size:11px; color:var(--text-secondary);">@${p.area}</div>
+      </div>
+      <button class="btn-primary" style="padding:4px 10px; font-size:11px;">共有</button>
+    `;
+
+    row.querySelector("button").onclick = async () => {
+      document.getElementById("dmSpotPickerModal").classList.remove("show");
+      const shareMsg = `[SPOT_SHARE:${p.id}]`;
+      if (db) {
+        await db.from("messages").insert([{
+          id: generateUniqueId("msg"),
+          from_user_id: currentUser.userId,
+          to_user_id: currentDmTargetUserId,
+          message: shareMsg
+        }]);
+      }
+      await sendNotification(currentDmTargetUserId, 'message', null, `📍 ${p.title} を共有しました`);
+      openDmChatPage(currentDmTargetUserId, document.getElementById("dmPageTitle").textContent.split(" ")[0]);
+    };
+
+    container.appendChild(row);
+  });
+}
+
+const dmSpotSearch = document.getElementById("dmSpotSearchInput");
+if (dmSpotSearch) {
+  dmSpotSearch.oninput = (e) => renderDmSpotPickerList(e.target.value.toLowerCase().trim());
+}
 } // ← setupEventListeners() 関数の正しい閉じカッコ
 
 // アプリ起動

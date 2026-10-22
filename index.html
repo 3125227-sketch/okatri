@@ -355,9 +355,16 @@
             <div style="width:50px;"></div>
           </div>
           <div class="dm-messages" id="dmPageMessageList"></div>
-          <div class="dm-input-row">
+          <div class="dm-input-row" style="position:relative;">
+            <!-- ★ スタンプボタン ＆ スポット共有ボタン -->
+            <button type="button" id="openDmStickerBtn" class="dm-tool-btn" title="スタンプ"><i class="fa-regular fa-face-smile"></i></button>
+            <button type="button" id="openDmShareSpotBtn" class="dm-tool-btn" title="行きたい場所を共有"><i class="fa-solid fa-map-location-dot"></i></button>
+            
             <input type="text" id="dmPageInput" placeholder="メッセージを入力...">
             <button id="sendDmPageBtn" class="btn-primary" style="width:auto; padding:8px 18px;">送信</button>
+            
+            <!-- スタンプ選択ポップアップ -->
+            <div id="dmStickerPicker" class="sticker-picker-popup" style="display:none;"></div>
           </div>
         </div>
       </section>
@@ -450,14 +457,17 @@
             <div id="pokedexProgressBar" style="width:0%; height:100%; background:var(--primary-accent); transition: width 0.3s;"></div>
           </div>
         </div>
-        <!-- ★ 公式限定作成ボタン（バッジ作成 / ラリー作成） -->
+        <!-- ★ 公式限定作成ボタン（バッジ作成 / ラリー作成 / スタンプ追加） -->
         <div id="adminCreateRallyArea" style="display:none; margin-bottom: 16px;">
-          <div style="display:flex; gap:8px;">
-            <button class="btn-primary" id="openCreateBadgeModalBtn" style="flex:1; background:#0f172a; border-color:#0f172a; font-size:12px;">
-              <i class="fa-solid fa-award"></i> 【公式限定】バッジを作成
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn-primary" id="openCreateBadgeModalBtn" style="flex:1; min-width:110px; background:#0f172a; border-color:#0f172a; font-size:12px;">
+              <i class="fa-solid fa-award"></i> バッジ作成
             </button>
-            <button class="btn-primary" id="openCreateRallyModalBtn" style="flex:1; background:#0f172a; border-color:#0f172a; font-size:12px;">
-              <i class="fa-solid fa-flag"></i> 【公式限定】ラリーを作成
+            <button class="btn-primary" id="openCreateRallyModalBtn" style="flex:1; min-width:110px; background:#0f172a; border-color:#0f172a; font-size:12px;">
+              <i class="fa-solid fa-flag"></i> ラリー作成
+            </button>
+            <button class="btn-primary" id="openCreateStickerModalBtn" style="flex:1; min-width:110px; background:#0f172a; border-color:#0f172a; font-size:12px;">
+              <i class="fa-regular fa-face-smile"></i> スタンプ追加
             </button>
           </div>
         </div>
@@ -1002,12 +1012,17 @@
     <div class="comment-list" id="postCommentsModalList" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:0;"></div>
 
     <!-- WEAR風 下部入力バー -->
-    <div class="wear-comment-bar">
+    <div class="wear-comment-bar" style="position:relative;">
+      <!-- ★ コメント用スタンプボタン -->
+      <button type="button" id="openCommentStickerBtn" class="dm-tool-btn" title="スタンプ"><i class="fa-regular fa-face-smile"></i></button>
       <img src="" id="commentBarMyAvatar" class="wear-my-avatar" onerror="this.src='https://via.placeholder.com/32'">
       <div class="wear-input-wrap">
         <input type="text" id="newCommentInput" placeholder="コメントを追加...">
       </div>
       <button id="addCommentBtn" class="wear-send-btn">送信</button>
+
+      <!-- コメント用スタンプポップアップ -->
+      <div id="commentStickerPicker" class="sticker-picker-popup" style="display:none;"></div>
     </div>
   </div>
 </div>
@@ -1040,6 +1055,50 @@
       <button class="close-btn" id="closeAllRalliesModalBtn"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="all-rallies-grid" id="allRalliesGrid" style="flex:1; overflow-y:auto; padding-bottom:20px;"></div>
+  </div>
+</div>
+  <!-- 行きたい場所（スポット）共有モーダル -->
+<div class="modal-backdrop" id="dmSpotPickerModal">
+  <div class="modal-sheet" style="max-height:80vh; display:flex; flex-direction:column;">
+    <div class="modal-header">
+      <h2>行きたい場所を共有</h2>
+      <button class="close-btn" id="closeDmSpotPickerModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-search-box" style="margin-bottom:10px;">
+      <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input type="text" id="dmSpotSearchInput" placeholder="スポット名やエリアで検索...">
+    </div>
+    <div id="dmSpotPickerList" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;"></div>
+  </div>
+</div>
+  <!-- 公式専用 スタンプ追加モーダル -->
+<div class="modal-backdrop" id="createStickerModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>新規スタンプを追加</h2>
+      <button class="close-btn" id="closeCreateStickerModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="createStickerForm">
+      <div class="form-group">
+        <label>スタンプ画像（背景透過PNG推奨） <span class="required-badge">必須</span></label>
+        <input type="file" id="stickerFileInput" accept="image/*" required>
+        <div id="stickerPreviewBox" style="text-align:center; margin-top:10px;"></div>
+      </div>
+      <div class="form-group">
+        <label>スタンプ名（例: 白桃ハート、OK！）</label>
+        <input type="text" id="stickerNameInput" placeholder="スタンプの名称">
+      </div>
+      <div class="form-group">
+        <label>種類（カテゴリ） <span class="required-badge">必須</span></label>
+        <input type="text" id="stickerCategoryInput" list="stickerCategoryDatalist" required placeholder="選択または新しい種類を入力">
+        <datalist id="stickerCategoryDatalist"></datalist>
+        <small style="color:var(--text-muted); font-size:11px;">※「岡山名物」「リアクション」等を選ぶか、新しい種類名を入力できます。</small>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelCreateStickerBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitCreateStickerBtn">スタンプを公開</button>
+      </div>
+    </form>
   </div>
 </div>
 
