@@ -50,6 +50,23 @@ function safeOnClick(id, handler) {
   if (el) el.onclick = handler;
 }
 
+// ★ 追加: 説明文からハッシュタグを自動抽出（全角スペース「　」や全角「＃」にも対応）
+function extractTagsFromText(text) {
+  if (!text) return "#岡山";
+  // 半角#または全角＃から始まり、空白（半角・全角）・改行・次の#の手前までを抽出
+  const matches = text.match(/[#＃][^\s　#＃]+/g);
+  if (!matches || matches.length === 0) return "#岡山";
+  // 全角＃を半角#に揃え、重複を除去してスペース区切りで連結
+  const cleanTags = [...new Set(matches.map(t => '#' + t.slice(1)))];
+  return cleanTags.join(' ');
+}
+
+// ★ 追加: 説明文からハッシュタグ部分を除去して本文だけを取り出す
+function removeTagsFromText(text) {
+  if (!text) return "";
+  return text.replace(/[#＃][^\s　#＃]+/g, '').trim();
+}
+
 function getInitialTimeSlot() {
   const h = new Date().getHours();
   return (h >= 3 && h < 18) ? "day" : "night";
@@ -483,6 +500,39 @@ function updateNotificationBadges(count) {
   }
 }
 
+// ★ 追加: 通知画面を開いたときに赤ランプを消し、すべて既読にする処理
+async function markAllNotificationsAsRead() {
+  if (!currentUser) return;
+  const myId = (currentUser.userId || "").trim();
+
+  // 1. 赤色ランプ（バッジ）を即座に消去
+  updateNotificationBadges(0);
+
+  // 2. メモリ上とローカルストレージの通知をすべて既読に更新
+  notificationsData.forEach(n => { n.is_read = true; });
+  try {
+    let localPool = JSON.parse(localStorage.getItem("okatari_global_notifications") || "[]");
+    localPool.forEach(n => {
+      if ((n.to_user_id || "").trim() === myId) {
+        n.is_read = true;
+      }
+    });
+    localStorage.setItem("okatari_global_notifications", JSON.stringify(localPool));
+  } catch(e) {}
+
+  // 3. Supabase（データベース）側も一括で既読に更新
+  if (db) {
+    try {
+      await db.from("notifications")
+        .update({ is_read: true })
+        .eq("to_user_id", myId)
+        .eq("is_read", false);
+    } catch(err) {
+      console.warn("一括既読更新エラー:", err);
+    }
+  }
+}
+
 function renderNotificationsPage() {
   // ページ側とモーダル側の両方のコンテナを更新
   const containers = [
@@ -522,6 +572,10 @@ function renderNotificationsPage() {
       } else if (n.type === 'follow') {
         icon = '<div class="notify-icon follow"><i class="fa-solid fa-user-plus"></i></div>';
         text = `<b>${n.from_nickname}</b> さんにフォローされました`;
+      } else if (n.type === 'message') {
+        // ★ 追加: メッセージ通知用のアイコンと指定の文言
+        icon = '<div class="notify-icon message" style="background:#8b5cf6;"><i class="fa-solid fa-paper-plane"></i></div>';
+        text = `<b>${n.from_nickname}</b>から新着メッセージ`;
       }
 
       item.innerHTML = `
@@ -543,8 +597,11 @@ function renderNotificationsPage() {
           }
         }
 
-        // 通知対象の投稿詳細またはユーザー画面を開く
-        if (n.post_id) {
+        // 通知対象の投稿詳細・ユーザー画面・メッセージ画面を開く
+        if (n.type === 'message') {
+          // ★ 追加: メッセージ通知をタップしたら直接その人とのチャットを開く
+          openDmChatPage(n.from_user_id, n.from_nickname);
+        } else if (n.post_id) {
           let post = postsData.find(x => x.id === n.post_id);
           if (!post && db) {
             // ローカルにまだ無い投稿ならDBから直接取得
@@ -608,7 +665,10 @@ function setupNavigation() {
       if (tabId === "tabNewsPage") renderAnnouncements();
       if (tabId === "tabAbout") renderAboutPage();
       if (tabId === "tabNotifications") {
-        fetchNotifications(); // サーバーから最新通知を取得して描画
+        // ★ 最新通知を表示したあと、即座に赤ランプを消す
+        fetchNotifications().then(() => {
+          markAllNotificationsAsRead();
+        });
       }
     });
   });
@@ -1984,10 +2044,11 @@ function openEditPostModal(post) {
   document.getElementById("editPostTitle").value = post.title || "";
   document.getElementById("editPostArea").value = post.area || "岡山市";
   document.getElementById("editPostTimeSlot").value = post.time_slot || "all";
-  document.getElementById("editPostTags").value = post.tags || "";
   document.getElementById("editPostAddress").value = post.address || "";
   document.getElementById("editPostExternalUrl").value = post.external_url || "";
-  document.getElementById("editPostDescription").value = post.description || "";
+  // ★ 編集時は本文の後ろに現在のタグを並べて編集しやすく復元
+  const fullEditDesc = `${post.description || ''} ${post.tags || ''}`.trim();
+  document.getElementById("editPostDescription").value = fullEditDesc;
 
   document.getElementById("detailModal").classList.remove("show");
   document.getElementById("editPostModal").classList.add("show");
@@ -2034,6 +2095,9 @@ function openDetail(item) {
     imageHtml = `<img src="${displayImages[0]}" onerror="this.src='https://via.placeholder.com/800x600?text=OKATRI'" style="width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:var(--radius-md); margin-bottom:12px; border:1px solid var(--border-subtle);">`;
   }
 
+  // ★ ここに追加します（content.innerHTML の直前）
+  const cleanDisplayDesc = removeTagsFromText(item.description || '');
+
   content.innerHTML = `
     ${imageHtml}
     
@@ -2077,7 +2141,8 @@ function openDetail(item) {
     
     <h2 style="font-size:17px; font-weight:700; margin:4px 0 6px; color:var(--text-primary);">${item.title}</h2>
     <div style="margin-bottom:8px;">${tagsHtml}</div>
-    <p style="font-size:13px; line-height:1.6; margin-bottom:12px; color:var(--text-primary);">${item.description || ''}</p>
+    <!-- ★ ここを ${item.description || ''} から ${cleanDisplayDesc} に書き換えます -->
+    <p style="font-size:13px; line-height:1.6; margin-bottom:12px; color:var(--text-primary);">${cleanDisplayDesc}</p>
     
     ${item.external_url ? `
       <div style="margin-bottom:12px;">
@@ -3006,10 +3071,11 @@ function setupEventListeners() {
       const newTitle = document.getElementById("editPostTitle").value.trim();
       const newArea = document.getElementById("editPostArea").value;
       const newTimeSlot = document.getElementById("editPostTimeSlot").value;
-      const newTags = document.getElementById("editPostTags").value.trim();
       const newAddress = document.getElementById("editPostAddress").value.trim();
       const newExtUrl = document.getElementById("editPostExternalUrl").value.trim();
-      const newDesc = document.getElementById("editPostDescription").value.trim();
+      const rawEditDesc = document.getElementById("editPostDescription").value.trim();
+      const newTags = extractTagsFromText(rawEditDesc);
+      const newDesc = removeTagsFromText(rawEditDesc); // ★ 本文からハッシュタグを除去
 
       let newLat = targetPost.lat;
       let newLng = targetPost.lng;
@@ -3418,6 +3484,9 @@ function setupEventListeners() {
         message: msg
       }]);
     }
+
+    // ★ 追加: 相手に新着メッセージ通知を送信
+    await sendNotification(currentDmTargetUserId, 'message', null, msg);
   });
 
   safeOnClick("getGeoBtn", fetchBackgroundLocation);
@@ -3437,7 +3506,6 @@ function setupEventListeners() {
 
         const tIn = document.getElementById("postTitle");
         const aIn = document.getElementById("postArea");
-        const tgIn = document.getElementById("postTags");
         const adIn = document.getElementById("postAddress");
         const exIn = document.getElementById("postExternalUrl");
         const dIn = document.getElementById("postDescription");
@@ -3497,18 +3565,23 @@ function setupEventListeners() {
 
         if (btn) btn.textContent = "投稿中...";
 
+        // ★ 説明文からハッシュタグを抽出し、説明本文からはハッシュタグを除去
+        const rawDesc = dIn ? dIn.value : "";
+        const autoTags = extractTagsFromText(rawDesc);
+        const cleanDesc = removeTagsFromText(rawDesc); // 本文のみ
+
         const newPost = {
           id: generateUniqueId("post"),
           user_id: currentUser ? currentUser.userId : "guest",
           nickname: currentUser ? currentUser.nickname : "匿名",
           title: tIn ? tIn.value : "",
           area: aIn ? aIn.value : "",
-          tags: (tgIn ? tgIn.value : "") || "#岡山",
+          tags: autoTags,
           address: inputAddress,
           lat: postLat,
           lng: postLng,
           external_url: exIn ? exIn.value : "",
-          description: dIn ? dIn.value : "",
+          description: cleanDesc, // ★ ハッシュタグが消えた本文のみを保存
           time_slot: slotIn ? slotIn.value : "all",
           date: new Date().toLocaleDateString("ja-JP"),
           likes: [],
