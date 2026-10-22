@@ -4364,13 +4364,18 @@ window.openPostShareModal = function(post) {
       item.innerHTML = `
         <img src="${avSrc}" class="share-user-avatar" onerror="this.src='https://via.placeholder.com/50'">
         <div class="share-user-name">${u.nickname}</div>
-        <button type="button" class="share-user-send-pill">送信</button>
       `;
 
-      // 「送信」ボタンを押したときのDM送信処理
-      const sendBtn = item.querySelector("button");
-      sendBtn.onclick = async () => {
-        sendBtn.textContent = "送信中...";
+      // ★ アイコンをタップしたら送信して相手のチャット画面へ移動
+      item.onclick = async (e) => {
+        e.stopPropagation();
+
+        // 1. シェアモーダルと投稿詳細モーダルを閉じる
+        modal.classList.remove("show");
+        const detailModal = document.getElementById("detailModal");
+        if (detailModal) detailModal.classList.remove("show");
+
+        // 2. メッセージを送信
         const shareMsg = `[SPOT_SHARE:${post.id}]`;
         if (db) {
           await db.from("messages").insert([{
@@ -4381,8 +4386,9 @@ window.openPostShareModal = function(post) {
           }]);
         }
         await sendNotification(targetId, 'message', null, `📍 ${post.title} を共有しました`);
-        sendBtn.textContent = "送信済";
-        sendBtn.classList.add("sent");
+
+        // 3. ★ その相手とのメッセージ画面（チャット）へ即座に移動！
+        openDmChatPage(targetId, u.nickname);
       };
 
       usersList.appendChild(item);

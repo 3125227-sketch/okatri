@@ -2372,6 +2372,13 @@ body {
   width: 66px;
   flex-shrink: 0;
   text-align: center;
+  cursor: pointer; /* ★ 全体を指マークにする */
+}
+.share-user-item:active .share-user-avatar {
+  transform: scale(0.92); /* タップした瞬間にペコッと凹む */
+}
+.share-user-item:hover .share-user-avatar {
+  border-color: var(--primary-accent);
 }
 .share-user-avatar {
   width: 52px;
@@ -2379,7 +2386,8 @@ body {
   border-radius: 50%;
   object-fit: cover;
   background: #e2e8f0;
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--border-subtle);
+  transition: transform 0.15s ease, border-color 0.15s ease;
 }
 .share-user-name {
   font-size: 11px;
@@ -2390,21 +2398,9 @@ body {
   text-overflow: ellipsis;
   width: 100%;
 }
-.share-user-send-pill {
-  background: var(--primary-accent);
-  color: #fff;
-  border: none;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.share-user-send-pill.sent {
-  background: #e2e8f0;
-  color: var(--text-secondary);
-  pointer-events: none;
+/* アイコンをタップしたときの少し凹むアニメーション */
+.share-user-item:hover .share-user-avatar {
+  border-color: var(--primary-accent);
 }
 
 /* 下部共有アクション */
