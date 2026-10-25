@@ -2544,3 +2544,380 @@ body:has(#tabDm.active) .mobile-bottom-nav {
   background: linear-gradient(135deg, #10b981, #059669);
   box-shadow: 0 4px 10px rgba(16, 185, 129, 0.45);
 }
+/* ==========================================
+   【OKATRI物語】フルスクリーンノベル＆ミッションUI
+========================================== */
+.story-fullscreen-modal {
+  z-index: 40000 !important; /* 最前面 */
+  padding: 0 !important;
+  background: #000000 !important;
+}
+
+.story-screen-wrap {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* 全画面背景 */
+.story-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: background-image 0.4s ease;
+  z-index: 1;
+}
+
+/* 上部ヘッダー（タイトル・閉じる） */
+.story-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: calc(10px + env(safe-area-inset-top, 6px)) 16px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%);
+}
+.story-header-title {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.story-close-btn {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* キャラクター立ち絵 */
+.story-chara-container {
+  position: absolute;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  height: 65%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.story-chara-img {
+  max-height: 100%;
+  max-width: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+  transition: opacity 0.3s ease;
+}
+
+/* 下部セリフウィンドウ（タップで進行） */
+.story-text-window {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 16px 18px calc(24px + env(safe-area-inset-bottom, 16px));
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.88) 85%, rgba(15, 23, 42, 0) 100%);
+  cursor: pointer;
+  z-index: 5;
+  box-sizing: border-box;
+}
+.story-speaker-badge {
+  display: inline-block;
+  background: var(--primary-accent);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.story-dialogue-text {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 48px;
+  word-break: break-word;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.story-tap-indicator {
+  position: absolute;
+  right: 20px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 10px));
+  color: var(--primary-accent);
+  font-size: 16px;
+  animation: bounceDown 1s infinite alternate ease-in-out;
+}
+@keyframes bounceDown {
+  from { transform: translateY(0); opacity: 0.5; }
+  to { transform: translateY(5px); opacity: 1; }
+}
+
+/* ==========================================
+   暗転ミッションオーバーレイ（チェックイン ＆ 謎解き）
+========================================== */
+.story-mission-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(6px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.story-mission-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  animation: popIn 0.25s ease-out;
+}
+@keyframes popIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.mission-tag {
+  display: inline-block;
+  background: #fdf2f6;
+  color: var(--primary-accent);
+  border: 1px solid #fbcfe0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+.mission-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* チェックイン用円形スポット */
+.story-circle-slot {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 3px dashed #d97706;
+  background: #ffffff;
+  margin: 0 auto 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+.story-circle-img {
+  width: 100%;
+  height: 65%;
+  object-fit: cover;
+  border-bottom: 1px dashed #cbd5e1;
+}
+.story-circle-name {
+  width: 100%;
+  height: 35%;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  color: #0f172a;
+}
+.story-action-btn {
+  width: 100%;
+  padding: 11px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.mission-hint-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 10px;
+}
+
+/* 謎解きカード */
+.quiz-question-box {
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  text-align: left;
+}
+.quiz-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quiz-input-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+}
+.quiz-input-group input:focus {
+  border-color: var(--primary-accent);
+}
+
+/* ==========================================
+   クリア＆現物引き換えチケットUI
+========================================== */
+.story-clear-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(6px);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+.story-clear-sheet {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 26px 20px;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.clear-trophy-icon {
+  font-size: 36px;
+  color: #f59e0b;
+  margin-bottom: 6px;
+}
+.clear-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+.clear-story-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* バッジ獲得表示 */
+.clear-badge-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fdf2f6;
+  border: 1px solid #fbcfe0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  text-align: left;
+  margin-bottom: 14px;
+}
+.clear-badge-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-accent);
+}
+
+/* 現物引き換えチケットカード */
+.clear-ticket-card {
+  background: #ffffff;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.ticket-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.ticket-status-badge.unused {
+  background: #dcfce7;
+  color: #15803d;
+}
+.ticket-status-badge.used {
+  background: #f1f5f9;
+  color: #64748b;
+  text-decoration: line-through;
+}
+.ticket-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.ticket-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* 引換ボタン（未使用時・使用済み時） */
+.btn-ticket-claim {
+  width: 100%;
+  padding: 10px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.btn-ticket-claim.claimed {
+  background: #94a3b8 !important;
+  color: #ffffff !important;
+  cursor: not-allowed !important;
+}
+.ticket-warning {
+  font-size: 10px;
+  color: #ef4444;
+  margin-top: 6px;
+  line-height: 1.4;
+}

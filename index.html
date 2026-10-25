@@ -1139,6 +1139,106 @@
     </div>
   </div>
 </div>
+  <!-- ==========================================
+     ★ OKATRI物語 フルスクリーンノベルモーダル
+=========================================== -->
+<div class="modal-backdrop story-fullscreen-modal" id="storyModal">
+  <div class="story-screen-wrap" id="storyScreenWrap">
+    
+    <!-- 背景画像レイヤー -->
+    <div class="story-bg" id="storyBgLayer"></div>
+
+    <!-- ヘッダー補助バー（タイトル・中断ボタン） -->
+    <div class="story-top-bar">
+      <span class="story-header-title" id="storyHeaderTitle">OKATRI物語</span>
+      <button type="button" class="story-close-btn" id="closeStoryModalBtn" title="物語を一時中断"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- キャラクター立ち絵コンテナ -->
+    <div class="story-chara-container" id="storyCharaContainer">
+      <img src="" id="storyCharaImg" class="story-chara-img" alt="character" style="display:none;">
+    </div>
+
+    <!-- 下部メッセージウィンドウ（タップで進行） -->
+    <div class="story-text-window" id="storyTextWindow">
+      <div class="story-speaker-badge" id="storySpeakerBadge">？？？</div>
+      <div class="story-dialogue-text" id="storyDialogueText">画面をタップして物語を開始します。</div>
+      <div class="story-tap-indicator"><i class="fa-solid fa-caret-down"></i></div>
+    </div>
+
+    <!-- ==========================================
+         暗転ミッションレイヤー（GPSチェックイン ＆ 謎解き）
+    =========================================== -->
+    <div class="story-mission-overlay" id="storyMissionOverlay" style="display:none;">
+      
+      <!-- 1. GPSチェックイン枠（スタンプ帳風の円形スロット） -->
+      <div class="story-mission-card" id="storyCheckInBox" style="display:none;">
+        <div class="mission-tag"><i class="fa-solid fa-location-dot"></i> CHECK IN MISSION</div>
+        <div class="mission-desc">指定の場所へ訪れてチェックインしよう</div>
+        
+        <div class="story-circle-slot" id="storySpotCircle">
+          <img src="" id="storySpotImg" class="story-circle-img" onerror="this.src='https://via.placeholder.com/120?text=SPOT'">
+          <div class="story-circle-name" id="storySpotName">目的地</div>
+        </div>
+
+        <button type="button" class="btn-primary story-action-btn" id="storyCheckInBtn">
+          <i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン
+        </button>
+        <div class="mission-hint-text">※目的地から約500m以内で判定されます</div>
+      </div>
+
+      <!-- 2. 謎解き・キーワード入力枠 -->
+      <div class="story-mission-card" id="storyQuizBox" style="display:none;">
+        <div class="mission-tag"><i class="fa-solid fa-key"></i> 謎解きミッション</div>
+        <div class="quiz-question-box" id="storyQuizQuestion">問題文がここに表示されます</div>
+        
+        <div class="quiz-input-group">
+          <input type="text" id="storyQuizInput" placeholder="答え・キーワードを入力...">
+          <button type="button" class="btn-primary" id="storyQuizSubmitBtn">解答する</button>
+        </div>
+        <div class="mission-hint-text">※現地の看板や物語のヒントをよく観察しよう</div>
+      </div>
+
+    </div>
+
+    <!-- ==========================================
+         クリア ＆ 1回限り現物引換チケット画面
+    =========================================== -->
+    <div class="story-clear-overlay" id="storyClearOverlay" style="display:none;">
+      <div class="story-clear-sheet">
+        <div class="clear-trophy-icon"><i class="fa-solid fa-crown"></i></div>
+        <h2 class="clear-title">QUEST CLEAR!</h2>
+        <div class="clear-story-title" id="storyClearStoryTitle">物語を完結しました</div>
+
+        <!-- デジタルバッジ獲得表示 -->
+        <div class="clear-badge-card" id="storyClearBadgeArea" style="display:none;">
+          <img src="" id="storyClearBadgeImg" class="clear-badge-img">
+          <div>
+            <div style="font-size:11px; color:var(--primary-accent); font-weight:700;">アチーブメント獲得！</div>
+            <div style="font-size:13px; font-weight:700;" id="storyClearBadgeTitle">バッジ名</div>
+          </div>
+        </div>
+
+        <!-- リアル現物引き換えチケット（1回限り消し込み機能） -->
+        <div class="clear-ticket-card" id="storyRealTicketArea" style="display:none;">
+          <div class="ticket-status-badge unused" id="storyTicketStatusBadge">● 未使用チケット</div>
+          <h3 class="ticket-title" id="storyTicketTitle">特製ポストカード</h3>
+          <p class="ticket-desc" id="storyTicketDesc">引換場所：案内所スタッフにお見せください</p>
+
+          <button type="button" class="btn-ticket-claim" id="claimRealRewardBtn">
+            <i class="fa-solid fa-gift"></i> スタッフ確認（特典を受け取る）
+          </button>
+          <div class="ticket-warning">※必ずスタッフの前でボタンを押してください。一度押すと元に戻せません。</div>
+        </div>
+
+        <button type="button" class="btn-secondary" id="exitStoryBtn" style="width:100%; margin-top:14px; padding:10px;">
+          物語を閉じる
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>

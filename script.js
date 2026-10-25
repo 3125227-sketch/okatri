@@ -266,6 +266,13 @@ let appAboutData = null;
 let mapInstance = null;
 let mapMarkers = [];
 let userCurrentLocationMarker = null;
+// ★ OKATRI物語用ステート
+let storiesData = [];
+let storyScenesData = [];
+let currentStory = null;
+let currentStoryScenes = [];
+let currentSceneIndex = 0;
+let userStoryProgressData = JSON.parse(localStorage.getItem("okatari_story_progress") || "{}");
 
 // 複数画像ファイル管理
 let currentUploadedFiles = [];
@@ -310,7 +317,7 @@ async function initApp() {
     };
 
     try {
-      const [users, comments, pickups, news, aiSpots, badges, about, rallies, routes, dbStickers] = await Promise.all([
+      const [users, comments, pickups, news, aiSpots, badges, about, rallies, routes, dbStickers, dbStories, dbScenes] = await Promise.all([
         safeFetch(db.from("users_custom").select("*"), []),
         safeFetch(db.from("comments").select("*").order("created_at", { ascending: true }), []),
         safeFetch(db.from("pickups").select("*"), []),
@@ -320,8 +327,13 @@ async function initApp() {
         safeFetch(db.from("app_about").select("*").eq("id", "about_main").maybeSingle(), null),
         safeFetch(db.from("stamp_rallies").select("*").eq("active", true), []),
         safeFetch(db.from("shared_routes").select("*").order("created_at", { ascending: false }), []),
-        safeFetch(db.from("stickers_master").select("*"), []) // ★ Supabaseから画像スタンプを取得
+        safeFetch(db.from("stickers_master").select("*"), []),
+        safeFetch(db.from("stories").select("*"), []),
+        safeFetch(db.from("story_scenes").select("*").order("step_order", { ascending: true }), [])
       ]);
+
+      if (dbStories && dbStories.length > 0) storiesData = dbStories;
+      if (dbScenes && dbScenes.length > 0) storyScenesData = dbScenes;
 
       // DBにスタンプが登録されていればローカルとマージして保存
       if (dbStickers && dbStickers.length > 0) {
@@ -407,6 +419,13 @@ async function initApp() {
   if (targetPostId) {
     const targetPost = postsData.find(p => p.id === targetPostId);
     if (targetPost) setTimeout(() => openDetail(targetPost), 400);
+  }
+  // ★ QRコード・URLパラメータによる隠し物語の自動起動 (?story=xxx)
+  const targetStoryId = urlParams.get("story");
+  if (targetStoryId) {
+    setTimeout(() => {
+      startStory(targetStoryId);
+    }, 500);
   }
 }
 
@@ -2289,6 +2308,16 @@ function openStampRallyDetail(rally) {
 safeOnClick("closeStampDetailModalBtn", () => {
   document.getElementById("stampRallyDetailModal").classList.remove("show");
 });
+// ★ OKATRI物語 タップ進行＆モーダル閉じる
+  safeOnClick("storyTextWindow", advanceStory);
+  safeOnClick("closeStoryModalBtn", () => {
+    if (confirm("物語を一時中断しますか？（次回続きから再開できます）")) {
+      document.getElementById("storyModal").classList.remove("show");
+    }
+  });
+  safeOnClick("exitStoryBtn", () => {
+    document.getElementById("storyModal").classList.remove("show");
+  });
 
 function handleGpsCheckIn(rally) {
   if (!currentUser) { alert("スタンプラリーの参加にはログインが必要です"); return; }
@@ -4657,6 +4686,325 @@ window.openPostShareModal = function(post) {
 
   modal.classList.add("show");
 };
+// ==========================================
+// ★ OKATRI物語 コントローラー
+// ==========================================
+window.startStory = function(storyId) {
+  // Supabaseから該当物語を検索（なければテスト用サンプルを起動）
+  currentStory = storiesData.find(s => s.id === storyId) || {
+    id: storyId,
+    title: "吉備津の鳴釜伝説",
+    reward_badge_title: "吉備の守護者",
+    has_real_reward: true,
+    real_reward_title: "OKATRI特製ステッカー",
+    real_reward_desc: "引換場所：吉備津神社 案内所スタッフにお見せください"
+  };
+
+  // シーンリストの取得（なければテスト用シーンをセット）
+  const fetchedScenes = storyScenesData.filter(s => s.story_id === storyId);
+  currentStoryScenes = fetchedScenes.length > 0 ? fetchedScenes : [
+    {
+      step_order: 1,
+      scene_type: "dialogue",
+      bg_image_url: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=80",
+      chara_image_url: "https://dkbcnzrniknrvnflnytc.supabase.co/storage/v1/object/public/post_images/Screenshot%202026-10-03%2000.05.35.png",
+      speaker_name: "案内人",
+      text: "よくぞこの札を手に入れたな。岡山に伝わる古代の伝承を解き明かす旅へ案内しよう。"
+    },
+    {
+      step_order: 2,
+      scene_type: "checkin",
+      bg_image_url: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1200&q=80",
+      chara_image_url: "",
+      speaker_name: "案内人",
+      text: "まずは指定の場所へ向かい、現地の気配を確かめるのじゃ。",
+      spot_name: "岡山後楽園",
+      spot_image_url: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=400&q=80",
+      target_lat: 34.6674,
+      target_lng: 133.9360,
+      radius_m: 600
+    },
+    {
+      step_order: 3,
+      scene_type: "quiz",
+      bg_image_url: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=80",
+      chara_image_url: "https://dkbcnzrniknrvnflnytc.supabase.co/storage/v1/object/public/post_images/Screenshot%202026-10-03%2000.05.35.png",
+      speaker_name: "案内人",
+      text: "現地に刻まれた暗号を読み解くのじゃ。",
+      quiz_question: "岡山城の別名で、漆黒の外観から名付けられた鳥の名前は？（漢字2文字）",
+      quiz_answer: "烏城"
+    },
+    {
+      step_order: 4,
+      scene_type: "dialogue",
+      bg_image_url: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1200&q=80",
+      chara_image_url: "https://dkbcnzrniknrvnflnytc.supabase.co/storage/v1/object/public/post_images/Screenshot%202026-10-03%2000.05.35.png",
+      speaker_name: "案内人",
+      text: "見事じゃ！全ての謎は解かれた。受け取った証を胸に、岡山の旅をさらに楽しむのじゃぞ！"
+    }
+  ];
+
+  // 以前の進捗があれば復元（クリア済みでなければ前回のステップから）
+  const prog = userStoryProgressData[storyId] || { current_step: 0, is_completed: false };
+  currentSceneIndex = (prog.current_step < currentStoryScenes.length) ? prog.current_step : 0;
+
+  const headerTitle = document.getElementById("storyHeaderTitle");
+  if (headerTitle) headerTitle.textContent = currentStory.title || "OKATRI物語";
+
+  // モーダルを開いて最初のシーンを描画
+  document.getElementById("storyMissionOverlay").style.display = "none";
+  document.getElementById("storyClearOverlay").style.display = "none";
+  document.getElementById("storyModal").classList.add("show");
+  renderCurrentScene();
+};
+
+function renderCurrentScene() {
+  if (!currentStoryScenes || currentStoryScenes.length === 0) return;
+  const scene = currentStoryScenes[currentSceneIndex];
+  if (!scene) return;
+
+  // 1. 背景の更新
+  const bg = document.getElementById("storyBgLayer");
+  if (bg && scene.bg_image_url) {
+    bg.style.backgroundImage = `url('${scene.bg_image_url}')`;
+  }
+
+  // 2. キャラクター立ち絵の更新
+  const charaImg = document.getElementById("storyCharaImg");
+  if (charaImg) {
+    if (scene.chara_image_url) {
+      charaImg.src = scene.chara_image_url;
+      charaImg.style.display = "block";
+    } else {
+      charaImg.style.display = "none";
+    }
+  }
+
+  // 3. 話者名とセリフの更新
+  const badge = document.getElementById("storySpeakerBadge");
+  const dialogue = document.getElementById("storyDialogueText");
+  if (badge) badge.textContent = scene.speaker_name || "？？？";
+  if (dialogue) dialogue.textContent = scene.text || "";
+
+  // 4. ミッション画面の制御（GPSまたは謎解き）
+  const overlay = document.getElementById("storyMissionOverlay");
+  const checkInBox = document.getElementById("storyCheckInBox");
+  const quizBox = document.getElementById("storyQuizBox");
+
+  if (scene.scene_type === "checkin") {
+    overlay.style.display = "flex";
+    checkInBox.style.display = "block";
+    quizBox.style.display = "none";
+
+    document.getElementById("storySpotName").textContent = scene.spot_name || "指定地";
+    const sImg = document.getElementById("storySpotImg");
+    if (sImg && scene.spot_image_url) sImg.src = scene.spot_image_url;
+
+    // チェックインボタンに判定イベントを設定
+    document.getElementById("storyCheckInBtn").onclick = () => {
+      handleStoryCheckIn(scene);
+    };
+  } else if (scene.scene_type === "quiz") {
+    overlay.style.display = "flex";
+    checkInBox.style.display = "none";
+    quizBox.style.display = "block";
+
+    document.getElementById("storyQuizQuestion").textContent = scene.quiz_question || scene.text || "";
+    document.getElementById("storyQuizInput").value = "";
+
+    document.getElementById("storyQuizSubmitBtn").onclick = () => {
+      handleStoryQuizSubmit(scene);
+    };
+  } else {
+    // 通常の会話シーン
+    overlay.style.display = "none";
+    checkInBox.style.display = "none";
+    quizBox.style.display = "none";
+  }
+
+  // 進捗の一時保存
+  saveStoryProgress(currentStory.id, currentSceneIndex, false);
+}
+
+// 画面タップで次へ進む処理
+function advanceStory() {
+  const scene = currentStoryScenes[currentSceneIndex];
+  // チェックインまたは謎解きミッション中はタップ送り不可（クリアするまで待機）
+  if (scene && (scene.scene_type === "checkin" || scene.scene_type === "quiz")) {
+    return;
+  }
+
+  if (currentSceneIndex < currentStoryScenes.length - 1) {
+    currentSceneIndex++;
+    renderCurrentScene();
+  } else {
+    // 最終シーン到達でクエストクリア！
+    completeStory();
+  }
+}
+
+// GPSチェックイン判定
+function handleStoryCheckIn(scene) {
+  if (!navigator.geolocation) {
+    alert("GPS機能が利用できません。");
+    return;
+  }
+
+  const btn = document.getElementById("storyCheckInBtn");
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 現在地判定中...`;
+  btn.disabled = true;
+
+  navigator.geolocation.getCurrentPosition((pos) => {
+    btn.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン`;
+    btn.disabled = false;
+
+    const uLat = pos.coords.latitude;
+    const uLng = pos.coords.longitude;
+    const dist = calculateDistance(uLat, uLng, scene.target_lat || 34.6618, scene.target_lng || 133.9350);
+
+    if (dist <= (scene.radius_m || 600)) {
+      alert(`🎉 チェックイン成功！\n【${scene.spot_name || '指定地'}】に到達しました！`);
+      document.getElementById("storyMissionOverlay").style.display = "none";
+      // 次のシーンへ
+      currentSceneIndex++;
+      renderCurrentScene();
+    } else {
+      alert(`⚠️ 目的地から約 ${Math.round(dist)}m 離れています。\n近く（約${scene.radius_m || 600}m以内）へ移動してからチェックインしてください。`);
+    }
+  }, (err) => {
+    btn.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン`;
+    btn.disabled = false;
+    alert("位置情報の取得に失敗しました。GPS設定をご確認ください。");
+  }, { enableHighAccuracy: true, timeout: 8000 });
+}
+
+// 謎解き解答判定
+function handleStoryQuizSubmit(scene) {
+  const inputEl = document.getElementById("storyQuizInput");
+  const val = (inputEl ? inputEl.value : "").trim().toLowerCase();
+  const correct = (scene.quiz_answer || "").trim().toLowerCase();
+
+  if (!val) {
+    alert("答えを入力してください。");
+    return;
+  }
+
+  if (val === correct) {
+    alert("🎉 正解！暗号の謎を解き明かした！");
+    document.getElementById("storyMissionOverlay").style.display = "none";
+    currentSceneIndex++;
+    renderCurrentScene();
+  } else {
+    alert("❌ 答えが違うようだ…もう一度よく考えてみよう！");
+  }
+}
+
+// クエストクリア＆現物チケット消し込み制御
+function completeStory() {
+  saveStoryProgress(currentStory.id, currentStoryScenes.length, true);
+
+  const clearOverlay = document.getElementById("storyClearOverlay");
+  document.getElementById("storyClearStoryTitle").textContent = `「${currentStory.title}」を完全踏破しました！`;
+
+  // 1. デジタルバッジの付与
+  const badgeArea = document.getElementById("storyClearBadgeArea");
+  if (currentStory.reward_badge_title) {
+    const badge = masterBadgesData.find(b => b.title === currentStory.reward_badge_title) || {
+      title: currentStory.reward_badge_title,
+      image_url: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=150&q=80",
+      description: `${currentStory.title}のクリア証`
+    };
+
+    if (currentUser) {
+      currentUser.achievements = currentUser.achievements || [];
+      if (!currentUser.achievements.some(a => a.title === badge.title)) {
+        currentUser.achievements.push({
+          title: badge.title,
+          image_url: badge.image_url,
+          description: badge.description,
+          date: new Date().toLocaleDateString("ja-JP")
+        });
+        localStorage.setItem("okatari_user", JSON.stringify(currentUser));
+        if (db) {
+          db.from("users_custom").update({ achievements: currentUser.achievements }).eq("user_id", currentUser.userId).then(() => {});
+        }
+      }
+    }
+
+    document.getElementById("storyClearBadgeTitle").textContent = badge.title;
+    document.getElementById("storyClearBadgeImg").src = badge.image_url;
+    badgeArea.style.display = "flex";
+  } else {
+    badgeArea.style.display = "none";
+  }
+
+  // 2. 現物特典チケットの表示＆消し込み判定
+  const ticketArea = document.getElementById("storyRealTicketArea");
+  if (currentStory.has_real_reward) {
+    ticketArea.style.display = "block";
+    document.getElementById("storyTicketTitle").textContent = currentStory.real_reward_title || "限定特典";
+    document.getElementById("storyTicketDesc").textContent = currentStory.real_reward_desc || "スタッフにご提示ください";
+
+    updateTicketStatusUI(currentStory.id);
+  } else {
+    ticketArea.style.display = "none";
+  }
+
+  clearOverlay.style.display = "flex";
+}
+
+// チケット状態（未使用／使用済み）の描画更新
+function updateTicketStatusUI(storyId) {
+  const prog = userStoryProgressData[storyId] || {};
+  const isClaimed = prog.reward_claimed === true;
+  const badge = document.getElementById("storyTicketStatusBadge");
+  const btn = document.getElementById("claimRealRewardBtn");
+
+  if (isClaimed) {
+    badge.className = "ticket-status-badge used";
+    badge.textContent = "✔ 使用済み（受取完了）";
+    btn.className = "btn-ticket-claim claimed";
+    btn.innerHTML = `<i class="fa-solid fa-check"></i> 受取済みです`;
+    btn.disabled = true;
+  } else {
+    badge.className = "ticket-status-badge unused";
+    badge.textContent = "● 未使用チケット";
+    btn.className = "btn-ticket-claim";
+    btn.innerHTML = `<i class="fa-solid fa-gift"></i> スタッフ確認（特典を受け取る）`;
+    btn.disabled = false;
+
+    // 1回限り消し込みクリックイベント
+    btn.onclick = () => {
+      if (!confirm("【店員・スタッフ専用確認】\n本当に特典を引き換えますか？\n※一度押すと「使用済み」になり元に戻せません。")) return;
+      
+      prog.reward_claimed = true;
+      prog.claimed_at = new Date().toISOString();
+      userStoryProgressData[storyId] = prog;
+      localStorage.setItem("okatari_story_progress", JSON.stringify(userStoryProgressData));
+
+      if (db && currentUser) {
+        db.from("user_story_progress").upsert([{
+          id: `${currentUser.userId}_${storyId}`,
+          user_id: currentUser.userId,
+          story_id: storyId,
+          reward_claimed: true,
+          claimed_at: prog.claimed_at
+        }]).then(() => {});
+      }
+
+      alert("🎉 特典の引き換えが完了しました！");
+      updateTicketStatusUI(storyId);
+    };
+  }
+}
+
+function saveStoryProgress(storyId, step, isDone) {
+  const current = userStoryProgressData[storyId] || {};
+  current.current_step = step;
+  if (isDone) current.is_completed = true;
+  userStoryProgressData[storyId] = current;
+  localStorage.setItem("okatari_story_progress", JSON.stringify(userStoryProgressData));
+}
 
 // アプリ起動
 initApp();
