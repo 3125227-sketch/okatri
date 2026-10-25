@@ -4983,6 +4983,38 @@ function renderStoriesList() {
     container.appendChild(card);
   });
 }
+// 会話ログ履歴配列
+let storyLogHistory = [];
+
+function openStoryLogModal() {
+  const modal = document.getElementById("storyLogOverlay");
+  const list = document.getElementById("storyLogList");
+  if (!modal || !list) return;
+
+  list.innerHTML = "";
+  if (storyLogHistory.length === 0) {
+    list.innerHTML = `<div class="empty-state" style="padding:40px 0;">まだ会話履歴はありません</div>`;
+  } else {
+    storyLogHistory.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "story-log-item";
+      row.innerHTML = `
+        <div class="story-log-speaker">${item.speaker}</div>
+        <div class="story-log-text">${item.text}</div>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  modal.style.display = "flex";
+  // ログの最下部へ自動スクロール
+  list.scrollTop = list.scrollHeight;
+}
+
+safeOnClick("openStoryLogBtn", openStoryLogModal);
+safeOnClick("closeStoryLogBtn", () => {
+  document.getElementById("storyLogOverlay").style.display = "none";
+});
 window.startStory = function(storyId) {
   // Supabaseから該当物語を検索（なければテスト用サンプルを起動）
   currentStory = storiesData.find(s => s.id === storyId) || {
@@ -5045,9 +5077,13 @@ window.startStory = function(storyId) {
   const headerTitle = document.getElementById("storyHeaderTitle");
   if (headerTitle) headerTitle.textContent = currentStory.title || "OKATRI物語";
 
+  // ログ履歴をリセット
+  storyLogHistory = [];
+
   // モーダルを開いて最初のシーンを描画
   document.getElementById("storyMissionOverlay").style.display = "none";
   document.getElementById("storyClearOverlay").style.display = "none";
+  document.getElementById("storyLogOverlay").style.display = "none";
   document.getElementById("storyModal").classList.add("show");
   renderCurrentScene();
 };
@@ -5074,10 +5110,18 @@ function renderCurrentScene() {
     }
   }
 
-  // 3. 話者名とセリフの更新（タイプライター文字送り）
+  // 3. 話者名とセリフの更新（タイプライター文字送り ＆ ログ蓄積）
   const badge = document.getElementById("storySpeakerBadge");
   if (badge) badge.textContent = scene.speaker_name || "？？？";
   typewriterStoryText(scene.text || "");
+
+  // 会話シーンのセリフをログ履歴に追加
+  if (scene.text) {
+    storyLogHistory.push({
+      speaker: scene.speaker_name || "？？？",
+      text: scene.text
+    });
+  }
 
   // 4. ミッション画面の制御（GPSまたは謎解き）
   const overlay = document.getElementById("storyMissionOverlay");

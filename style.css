@@ -2552,15 +2552,23 @@ body:has(#tabDm.active) .mobile-bottom-nav {
    【OKATRI物語】フルスクリーンノベル＆ミッションUI
 ========================================== */
 .story-fullscreen-modal {
-  z-index: 40000 !important; /* 最前面 */
+  z-index: 40000 !important;
   padding: 0 !important;
   background: #000000 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  justify-content: flex-start !important; /* ★ 下寄せを解除して上端からピッタリ配置 */
+  align-items: stretch !important;
 }
 
 .story-screen-wrap {
   position: relative;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   height: 100dvh;
   overflow: hidden;
   user-select: none;
@@ -2590,7 +2598,7 @@ body:has(#tabDm.active) .mobile-bottom-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 10;
+  z-index: 40; /* ★ 暗転オーバーレイ(20)より上に配置し、チェックイン時も常に押せるようにする */
   background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%);
 }
 .story-header-title {
@@ -3100,4 +3108,78 @@ body:has(#tabDm.active) .mobile-bottom-nav {
 .my-ticket-from-story {
   font-size: 11px;
   color: var(--text-muted);
+}
+/* ログボタン */
+.story-log-btn {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ログ表示オーバーレイ */
+.story-log-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+}
+.story-log-sheet {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 440px;
+  height: 80vh;
+  height: 80dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.story-log-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 700;
+  font-size: 13px;
+}
+.story-log-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.story-log-item {
+  border-bottom: 1px dashed var(--border-subtle);
+  padding-bottom: 10px;
+}
+.story-log-speaker {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-accent);
+  margin-bottom: 2px;
+}
+.story-log-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
 }

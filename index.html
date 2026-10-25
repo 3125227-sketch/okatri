@@ -1370,10 +1370,13 @@
     <!-- 背景画像レイヤー -->
     <div class="story-bg" id="storyBgLayer"></div>
 
-    <!-- ヘッダー補助バー（タイトル・中断ボタン） -->
+    <!-- ヘッダー補助バー（タイトル・ログ・中断ボタン） -->
     <div class="story-top-bar">
       <span class="story-header-title" id="storyHeaderTitle">OKATRI物語</span>
-      <button type="button" class="story-close-btn" id="closeStoryModalBtn" title="物語を一時中断"><i class="fa-solid fa-xmark"></i></button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button type="button" class="story-log-btn" id="openStoryLogBtn" title="会話ログ"><i class="fa-solid fa-clock-rotate-left"></i> ログ</button>
+        <button type="button" class="story-close-btn" id="closeStoryModalBtn" title="物語を一時中断"><i class="fa-solid fa-xmark"></i></button>
+      </div>
     </div>
 
     <!-- キャラクター立ち絵コンテナ -->
@@ -1469,6 +1472,18 @@
 
   </div>
 </div>
+  <!-- ==========================================
+         会話ログ表示オーバーレイ
+    =========================================== -->
+    <div class="story-log-overlay" id="storyLogOverlay" style="display:none;">
+      <div class="story-log-sheet">
+        <div class="story-log-header">
+          <span><i class="fa-solid fa-clock-rotate-left"></i> 会話ログ</span>
+          <button type="button" class="close-btn" id="closeStoryLogBtn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="story-log-list" id="storyLogList"></div>
+      </div>
+    </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>
