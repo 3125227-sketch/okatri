@@ -44,7 +44,8 @@
       <div class="sidebar-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot s-icon"></i> エリアマップ</div>
       <div class="sidebar-item" data-tab="tabRoutes"><i class="fa-solid fa-route s-icon"></i> ルート作成</div>
       <!-- サイドバー & ドロワーの nav に追加 -->
-<div class="sidebar-item" data-tab="tabAchievements"><i class="fa-solid fa-award s-icon"></i> アチーブメント図鑑</div>
+      <div class="sidebar-item" data-tab="tabStories"><i class="fa-solid fa-book-bookmark s-icon"></i> OKATRI物語</div>
+      <div class="sidebar-item" data-tab="tabAchievements"><i class="fa-solid fa-award s-icon"></i> アチーブメント図鑑</div>
       <div class="sidebar-item" data-tab="tabAccounts"><i class="fa-solid fa-magnifying-glass s-icon"></i> 検索</div>
       <div class="sidebar-item" data-tab="tabAbout"><i class="fa-regular fa-circle-question s-icon"></i> オカトリについて</div>
       <div class="sidebar-item" data-tab="tabProfile"><i class="fa-regular fa-user s-icon"></i> マイページ</div>
@@ -75,7 +76,8 @@
       <div class="drawer-item" data-tab="tabArea"><i class="fa-solid fa-map-location-dot d-icon"></i> エリアマップ</div>
       <div class="drawer-item" data-tab="tabRoutes"><i class="fa-solid fa-route d-icon"></i> ルート作成</div>
       <!-- mobileDrawer の drawer-nav に追加 -->
-<div class="drawer-item" data-tab="tabAchievements"><i class="fa-solid fa-award d-icon"></i> アチーブメント図鑑</div>
+      <div class="drawer-item" data-tab="tabStories"><i class="fa-solid fa-book-bookmark d-icon"></i> OKATRI物語</div>
+      <div class="drawer-item" data-tab="tabAchievements"><i class="fa-solid fa-award d-icon"></i> アチーブメント図鑑</div>
       <div class="drawer-item" data-tab="tabAccounts"><i class="fa-solid fa-magnifying-glass d-icon"></i> 検索</div>
       <div class="drawer-item" data-tab="tabAbout"><i class="fa-regular fa-circle-question d-icon"></i> オカトリについて</div>
       <div class="drawer-item" data-tab="tabProfile"><i class="fa-regular fa-user d-icon"></i> マイページ</div>
@@ -343,11 +345,16 @@
         <div class="profile-tab-switch">
           <button class="p-tab-btn active" id="pTabMyPostsBtn"><i class="fa-regular fa-image"></i> 投稿 (<span id="myPostsCount">0</span>)</button>
           <button class="p-tab-btn" id="pTabBookmarksBtn"><i class="fa-regular fa-bookmark"></i> 保存済み (<span id="myBookmarksCount">0</span>)</button>
+          <button class="p-tab-btn" id="pTabTicketsBtn"><i class="fa-solid fa-ticket"></i> 特典 (<span id="myTicketsCount">0</span>)</button>
         </div>
 
+        <!-- 投稿・保存済みグリッド -->
         <div class="spot-grid" id="myProfileSpotsGrid">
           <div class="empty-state">投稿はありません</div>
         </div>
+
+        <!-- ★ マイ特典チケット一覧リスト -->
+        <div id="myProfileTicketsList" style="display:none; flex-direction:column; gap:12px; margin-top:10px;"></div>
       </section>
 
       <!-- 8. DM専用ページ -->
@@ -437,6 +444,28 @@
             <button type="submit" class="btn-primary" id="saveProfileBtn">変更を保存</button>
           </form>
         </div>
+      </section>
+      <!-- ★ 新設：OKATRI物語専用タブ -->
+      <section id="tabStories" class="tab-pane">
+        <div class="section-title-box">
+          <div class="section-title-row">
+            <div>
+              <h2 class="section-heading">OKATRI物語（STORY QUEST）</h2>
+              <p class="section-desc">物語を読み解きながら岡山の歴史や隠されたスポットを巡る体験型探索</p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-secondary" id="openStoryCodeModalBtn" style="font-size:12px;">
+                <i class="fa-solid fa-key"></i> 合言葉入力
+              </button>
+              <!-- 公式アカウントのみ表示される物語作成ボタン -->
+              <button class="btn-primary" id="openCreateStoryModalBtn" style="display:none; font-size:12px; background:var(--primary-accent); border-color:var(--primary-accent);">
+                <i class="fa-solid fa-plus"></i> 物語作成
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="storyListContainer" class="story-h-scroll" style="flex-wrap:wrap; gap:16px;"></div>
       </section>
       
       <!-- アチーブメント図鑑 ＆ スタンプラリータブ -->
@@ -684,6 +713,143 @@
         <button type="submit" class="btn-primary" id="submitBtn">投稿を公開</button>
       </div>
     </form>
+  </div>
+</div>
+  <!-- 公式専用 物語シーン（セリフ・GPS・謎解き）追加モーダル -->
+<div class="modal-backdrop" id="addStorySceneModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>シーンを追加</h2>
+      <button class="close-btn" id="closeAddStorySceneModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="addStorySceneForm">
+      <input type="hidden" id="sceneStoryId">
+      
+      <div class="form-group">
+        <label>シーンの種類 <span class="required-badge">必須</span></label>
+        <select id="sceneTypeSelect" required>
+          <option value="dialogue" selected>通常会話（タップ進行）</option>
+          <option value="checkin">GPSチェックインミッション</option>
+          <option value="quiz">謎解きミッション（キーワード入力）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>背景画像URL</label>
+        <input type="url" id="sceneBgUrlInput" placeholder="https://...">
+      </div>
+
+      <div class="form-group">
+        <label>キャラクター立ち絵URL (透過PNG推奨)</label>
+        <input type="url" id="sceneCharaUrlInput" placeholder="https://...">
+      </div>
+
+      <div class="form-group">
+        <label>話者名（例: 案内人、桃太郎、？？？）</label>
+        <input type="text" id="sceneSpeakerInput" value="案内人">
+      </div>
+
+      <div class="form-group">
+        <label>セリフ・メッセージ本文 <span class="required-badge">必須</span></label>
+        <textarea id="sceneTextInput" rows="3" required placeholder="キャラクターのセリフを入力"></textarea>
+      </div>
+
+      <!-- GPSチェックイン用フィールド（checkin選択時のみ表示） -->
+      <div id="sceneCheckinFields" style="display:none; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:14px;">
+        <div class="form-group">
+          <label>目的地スポット名</label>
+          <input type="text" id="sceneSpotNameInput" placeholder="例: 岡山城天守閣前">
+        </div>
+        <div class="form-group">
+          <label>スポット写真URL</label>
+          <input type="url" id="sceneSpotImgInput" placeholder="https://...">
+        </div>
+        <div class="form-row-2col">
+          <div class="form-group">
+            <label>目標緯度 (Lat)</label>
+            <input type="number" step="any" id="sceneLatInput" placeholder="34.6655">
+          </div>
+          <div class="form-group">
+            <label>目標経度 (Lng)</label>
+            <input type="number" step="any" id="sceneLngInput" placeholder="133.9186">
+          </div>
+        </div>
+      </div>
+
+      <!-- 謎解き用フィールド（quiz選択時のみ表示） -->
+      <div id="sceneQuizFields" style="display:none; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:14px;">
+        <div class="form-group">
+          <label>謎解き・問題文</label>
+          <input type="text" id="sceneQuizQInput" placeholder="例: 岡山城の別名（漢字2文字）は？">
+        </div>
+        <div class="form-group">
+          <label>正解キーワード（判定用）</label>
+          <input type="text" id="sceneQuizAInput" placeholder="例: 烏城">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelAddStorySceneBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitAddStorySceneBtn">シーンを登録</button>
+      </div>
+    </form>
+  </div>
+</div>
+  <!-- ★ 公式専用 物語QRコード表示・印刷用モーダル -->
+<div class="modal-backdrop" id="storyQrModal">
+  <div class="modal-sheet" style="text-align:center; max-width:360px;">
+    <div class="modal-header">
+      <h2 id="storyQrModalTitle">物語のQRコード</h2>
+      <button class="close-btn" id="closeStoryQrModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">チラシや現地の看板に印刷してご活用ください</p>
+    
+    <!-- QRコード画像表示枠 -->
+    <div style="background:#ffffff; padding:16px; border-radius:12px; display:inline-block; border:1px solid var(--border-subtle); margin-bottom:12px;">
+      <img id="storyQrImg" src="" style="width:200px; height:200px; display:block;" alt="QR Code">
+    </div>
+
+    <div class="form-group" style="text-align:left;">
+      <label style="font-size:11px;">起動URL</label>
+      <input type="text" id="storyQrUrlInput" readonly style="font-size:11px; background:#f8fafc;">
+    </div>
+
+    <div style="display:flex; gap:8px;">
+      <button type="button" class="btn-secondary" id="copyStoryQrUrlBtn" style="flex:1;">
+        <i class="fa-regular fa-copy"></i> URLコピー
+      </button>
+      <a id="downloadStoryQrBtn" href="#" download="story_qr.png" class="btn-primary" style="flex:1; text-decoration:none;">
+        <i class="fa-solid fa-download"></i> QR画像を保存
+      </a>
+    </div>
+  </div>
+</div>
+  <!-- 合言葉（シークレットコード）入力モーダル -->
+<div class="modal-backdrop" id="storyCodeModal">
+  <div class="modal-sheet" style="max-width:360px;">
+    <div class="modal-header">
+      <h2>合言葉で物語を開始</h2>
+      <button class="close-btn" id="closeStoryCodeModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="storyCodeForm">
+      <div class="form-group">
+        <label>合言葉（物語ID / シークレットキー）</label>
+        <input type="text" id="storyCodeInput" required placeholder="例: story_kibitsu">
+      </div>
+      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;">現地のチラシや看板に記載された合言葉を入力してください。</p>
+      <button type="submit" class="btn-primary" style="width:100%;">物語の扉を開く</button>
+    </form>
+  </div>
+</div>
+
+<!-- 公式専用 シーン管理・確認・削除モーダル -->
+<div class="modal-backdrop" id="manageStoryScenesModal">
+  <div class="modal-sheet" style="max-height:85vh; display:flex; flex-direction:column;">
+    <div class="modal-header">
+      <h2 id="manageScenesModalTitle">シーン管理</h2>
+      <button class="close-btn" id="closeManageScenesModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="manageScenesList" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-bottom:14px;"></div>
   </div>
 </div>
 
@@ -1105,6 +1271,62 @@
     </form>
   </div>
 </div>
+  <!-- 公式専用 新規物語作成モーダル -->
+<div class="modal-backdrop" id="createStoryModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>新規物語（STORY QUEST）作成</h2>
+      <button class="close-btn" id="closeCreateStoryModalBtn"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="createStoryForm">
+      <div class="form-group">
+        <label>物語ID (英数字・アンダーバー) <span class="required-badge">必須</span></label>
+        <input type="text" id="storyIdInput" required placeholder="例: story_korakuen">
+      </div>
+      <div class="form-group">
+        <label>物語タイトル <span class="required-badge">必須</span></label>
+        <input type="text" id="storyTitleInput" required placeholder="例: 烏城に眠る黄金の烏">
+      </div>
+      <div class="form-group">
+        <label>あらすじ・見どころ</label>
+        <textarea id="storyDescInput" rows="2" placeholder="物語の概要"></textarea>
+      </div>
+      <div class="form-group">
+        <label>サムネイル画像URL</label>
+        <input type="url" id="storyThumbInput" placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label>クリア報酬バッジ</label>
+        <select id="storyRewardBadgeSelect"></select>
+      </div>
+      
+      <!-- 現物特典設定 -->
+      <div class="form-group" style="background:#f8fafc; padding:10px; border-radius:8px; border:1px solid var(--border-subtle);">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="storyHasRealReward" style="width:16px; height:16px;">
+          <span>現地での現物特典（ステッカー等）を付ける</span>
+        </label>
+        <div id="realRewardFields" style="display:none; margin-top:8px;">
+          <input type="text" id="storyRealTitleInput" placeholder="特典名（例: 特製クリアファイル）" style="margin-bottom:6px;">
+          <input type="text" id="storyRealDescInput" placeholder="引換場所（例: 岡山城案内所で提示）">
+        </div>
+      </div>
+
+      <!-- 隠し物語設定 -->
+      <div class="form-group">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="storyIsHidden" style="width:16px; height:16px;">
+          <span>隠し物語にする（一覧には非表示、QR/URL限定）</span>
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelCreateStoryBtn">キャンセル</button>
+        <button type="submit" class="btn-primary" id="submitCreateStoryBtn">物語を登録</button>
+      </div>
+    </form>
+  </div>
+</div>
   <!-- Instagram風 投稿共有モーダル -->
 <div class="modal-backdrop" id="postShareModal">
   <div class="modal-sheet insta-share-sheet">
@@ -1184,6 +1406,9 @@
         <button type="button" class="btn-primary story-action-btn" id="storyCheckInBtn">
           <i class="fa-solid fa-location-crosshairs"></i> 現在地でチェックイン
         </button>
+        <a id="storyNavMapLink" href="#" target="_blank" class="btn-secondary" style="width:100%; margin-top:8px; padding:9px; font-size:12px; text-decoration:none; display:none; justify-content:center; align-items:center; gap:6px;">
+          <i class="fa-solid fa-diamond-turn-right"></i> Googleマップで案内
+        </a>
         <div class="mission-hint-text">※目的地から約500m以内で判定されます</div>
       </div>
 
@@ -1217,6 +1442,11 @@
             <div style="font-size:11px; color:var(--primary-accent); font-weight:700;">アチーブメント獲得！</div>
             <div style="font-size:13px; font-weight:700;" id="storyClearBadgeTitle">バッジ名</div>
           </div>
+        </div>
+
+        <!-- ゲスト向けログイン案内バナー -->
+        <div id="storyGuestLoginNotice" style="display:none; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:8px 10px; font-size:11px; color:#b45309; margin-bottom:12px; text-align:left;">
+          <i class="fa-solid fa-circle-exclamation"></i> ログインすると、このバッジと特典をマイページに永久保存できます。
         </div>
 
         <!-- リアル現物引き換えチケット（1回限り消し込み機能） -->

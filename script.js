@@ -412,6 +412,7 @@ async function initApp() {
   renderMyAchievements();
   renderPokedex();
   renderStampRallies();
+  renderStoriesList(); // ★ 物語一覧の描画
   renderAboutPage();
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -886,6 +887,11 @@ function setupNavigation() {
         renderPokedex();
         renderStampRallies();
       }
+      if (tabId === "tabStories") {
+        renderStoriesList(); // ★ OKATRI物語タブを開いたときに更新
+        const storyAdminBtn = document.getElementById("openCreateStoryModalBtn");
+        if (storyAdminBtn) storyAdminBtn.style.display = (currentUser && currentUser.is_admin) ? "inline-flex" : "none";
+      }
       if (tabId === "tabProfile") {
         renderMyProfileSpots();
         renderMyAchievements();
@@ -942,6 +948,11 @@ function setupNavigation() {
     currentProfileTab = "posts";
     document.getElementById("pTabMyPostsBtn").classList.add("active");
     document.getElementById("pTabBookmarksBtn").classList.remove("active");
+    document.getElementById("pTabTicketsBtn").classList.remove("active");
+    const grid = document.getElementById("myProfileSpotsGrid");
+    grid.classList.remove("hidden");
+    grid.style.display = "";
+    document.getElementById("myProfileTicketsList").style.display = "none";
     renderMyProfileSpots();
   });
 
@@ -949,7 +960,24 @@ function setupNavigation() {
     currentProfileTab = "bookmarks";
     document.getElementById("pTabBookmarksBtn").classList.add("active");
     document.getElementById("pTabMyPostsBtn").classList.remove("active");
+    document.getElementById("pTabTicketsBtn").classList.remove("active");
+    const grid = document.getElementById("myProfileSpotsGrid");
+    grid.classList.remove("hidden");
+    grid.style.display = "";
+    document.getElementById("myProfileTicketsList").style.display = "none";
     renderMyProfileSpots();
+  });
+
+  safeOnClick("pTabTicketsBtn", () => {
+    currentProfileTab = "tickets";
+    document.getElementById("pTabTicketsBtn").classList.add("active");
+    document.getElementById("pTabMyPostsBtn").classList.remove("active");
+    document.getElementById("pTabBookmarksBtn").classList.remove("active");
+    const grid = document.getElementById("myProfileSpotsGrid");
+    grid.classList.add("hidden");
+    grid.style.display = "none";
+    document.getElementById("myProfileTicketsList").style.display = "flex";
+    renderMyTicketsList();
   });
 }
 
@@ -2023,6 +2051,82 @@ function renderMyProfileSpots() {
     `;
     card.onclick = () => openDetail(p);
     grid.appendChild(card);
+  });
+}
+// マイページ：獲得した現物特典チケット一覧の描画
+function renderMyTicketsList() {
+  const container = document.getElementById("myProfileTicketsList");
+  const countBadge = document.getElementById("myTicketsCount");
+  if (!container) return;
+  container.innerHTML = "";
+
+  // クリア済みかつ現物特典がある物語を抽出
+  const earnedStories = storiesData.filter(story => {
+    const prog = userStoryProgressData[story.id];
+    return story.has_real_reward && prog && prog.is_completed;
+  });
+
+  // 未使用の件数をカウント
+  const unusedCount = earnedStories.filter(s => !userStoryProgressData[s.id].reward_claimed).length;
+  if (countBadge) countBadge.textContent = unusedCount;
+
+  if (earnedStories.length === 0) {
+    container.innerHTML = `<div class="empty-state">獲得した特典チケットはありません。<br>OKATRI物語をクリアして特典を手に入れよう！</div>`;
+    return;
+  }
+
+  earnedStories.forEach(story => {
+    const prog = userStoryProgressData[story.id] || {};
+    const isClaimed = prog.reward_claimed === true;
+
+    const card = document.createElement("div");
+    card.className = `my-ticket-item-card ${isClaimed ? 'stamped' : ''}`;
+    card.innerHTML = `
+      <div class="my-ticket-header">
+        <span class="ticket-status-badge ${isClaimed ? 'used' : 'unused'}">
+          ${isClaimed ? '✔ 使用済み' : '● 未使用チケット'}
+        </span>
+        <span class="my-ticket-from-story">クエスト: ${story.title}</span>
+      </div>
+      <h3 style="font-size:15px; font-weight:700; color:var(--text-primary); margin:6px 0 4px;">
+        ${story.real_reward_title || '限定特典'}
+      </h3>
+      <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">
+        ${story.real_reward_desc || '現地スタッフにご提示ください'}
+      </p>
+      
+      <button type="button" class="btn-ticket-claim ${isClaimed ? 'claimed' : ''}" style="width:100%;" ${isClaimed ? 'disabled' : ''}>
+        ${isClaimed ? '<i class="fa-solid fa-check"></i> 受取済み' : '<i class="fa-solid fa-gift"></i> スタッフ確認（特典を受け取る）'}
+      </button>
+    `;
+
+    // 未使用時の消し込みクリック
+    if (!isClaimed) {
+      const claimBtn = card.querySelector(".btn-ticket-claim");
+      claimBtn.onclick = () => {
+        if (!confirm("【店員・スタッフ専用確認】\n本当に特典を引き換えますか？\n※一度押すと「使用済み」になり元に戻せません。")) return;
+
+        prog.reward_claimed = true;
+        prog.claimed_at = new Date().toISOString();
+        userStoryProgressData[story.id] = prog;
+        localStorage.setItem("okatari_story_progress", JSON.stringify(userStoryProgressData));
+
+        if (db && currentUser) {
+          db.from("user_story_progress").upsert([{
+            id: `${currentUser.userId}_${story.id}`,
+            user_id: currentUser.userId,
+            story_id: story.id,
+            reward_claimed: true,
+            claimed_at: prog.claimed_at
+          }]).then(() => {});
+        }
+
+        alert("🎉 特典の引き換えが完了しました！");
+        renderMyTicketsList();
+      };
+    }
+
+    container.appendChild(card);
   });
 }
 
@@ -3191,6 +3295,8 @@ function updateUserUI() {
     if (goToSettingsBtn) goToSettingsBtn.style.display = "inline-flex";
     if (drawerSettingsLink) drawerSettingsLink.style.display = "flex";
     if (adminRallyArea) adminRallyArea.style.display = currentUser.is_admin ? "block" : "none";
+    const storyAdminBtn = document.getElementById("openCreateStoryModalBtn");
+    if (storyAdminBtn) storyAdminBtn.style.display = currentUser.is_admin ? "inline-flex" : "none";
 
     const av = currentUser.avatar ? `<img src="${currentUser.avatar}">` : `<i class="fa-solid fa-user"></i>`;
     if (myAvatarBox) myAvatarBox.innerHTML = av;
@@ -3435,6 +3541,65 @@ function setupEventListeners() {
       alert(`🎉 新しいスタンプ「${name}」（種類: ${category}）を追加しました！\nコメントやDMですぐに使用できます。`);
       if (submitBtn) { submitBtn.textContent = "スタンプを公開"; submitBtn.disabled = false; }
       document.getElementById("createStickerModal").classList.remove("show");
+    };
+  }
+  // ★ 公式専用 物語作成モーダルの開閉
+  safeOnClick("openCreateStoryModalBtn", () => {
+    const sel = document.getElementById("storyRewardBadgeSelect");
+    if (sel) {
+      sel.innerHTML = masterBadgesData.map(b => `<option value="${b.title}">${b.title}</option>`).join('');
+    }
+    document.getElementById("createStoryForm").reset();
+    document.getElementById("realRewardFields").style.display = "none";
+    document.getElementById("createStoryModal").classList.add("show");
+  });
+  safeOnClick("closeCreateStoryModalBtn", () => document.getElementById("createStoryModal").classList.remove("show"));
+  safeOnClick("cancelCreateStoryBtn", () => document.getElementById("createStoryModal").classList.remove("show"));
+
+  // 現物特典チェックボックスの切り替え
+  const chkReal = document.getElementById("storyHasRealReward");
+  if (chkReal) {
+    chkReal.onchange = (e) => {
+      document.getElementById("realRewardFields").style.display = e.target.checked ? "block" : "none";
+    };
+  }
+
+  // 物語作成フォーム送信
+  const storyForm = document.getElementById("createStoryForm");
+  if (storyForm) {
+    storyForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const sId = document.getElementById("storyIdInput").value.trim();
+      const sTitle = document.getElementById("storyTitleInput").value.trim();
+      const sDesc = document.getElementById("storyDescInput").value.trim();
+      const sThumb = document.getElementById("storyThumbInput").value.trim();
+      const sBadge = document.getElementById("storyRewardBadgeSelect").value;
+      const sHasReal = document.getElementById("storyHasRealReward").checked;
+      const sRealTitle = document.getElementById("storyRealTitleInput").value.trim();
+      const sRealDesc = document.getElementById("storyRealDescInput").value.trim();
+      const sIsHidden = document.getElementById("storyIsHidden").checked;
+
+      const newStory = {
+        id: sId,
+        title: sTitle,
+        description: sDesc,
+        thumbnail_url: sThumb || "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=400&q=80",
+        reward_badge_title: sBadge,
+        has_real_reward: sHasReal,
+        real_reward_title: sRealTitle,
+        real_reward_desc: sRealDesc,
+        is_hidden: sIsHidden
+      };
+
+      storiesData.unshift(newStory);
+      renderStoriesList();
+
+      if (db) {
+        await db.from("stories").insert([newStory]);
+      }
+
+      alert(`🎉 物語「${sTitle}」を登録しました！${sIsHidden ? '\n（※隠し物語のため、一覧には非表示となります）' : ''}`);
+      document.getElementById("createStoryModal").classList.remove("show");
     };
   }
 
@@ -4689,6 +4854,135 @@ window.openPostShareModal = function(post) {
 // ==========================================
 // ★ OKATRI物語 コントローラー
 // ==========================================
+// 物語一覧（図鑑タブ内）の描画
+function renderStoriesList() {
+  const container = document.getElementById("storyListContainer");
+  if (!container) return;
+  container.innerHTML = "";
+
+  // 一般公開されている物語のみ表示（is_hidden = true は除外）
+  let list = storiesData.filter(s => !s.is_hidden);
+
+  // まだ登録がない場合のフォールバック（初期表示用）
+  if (list.length === 0) {
+    list = [
+      {
+        id: "story_kibitsu",
+        title: "吉備津の鳴釜伝説",
+        description: "古代吉備国に伝わる鬼神・温羅と鳴釜の謎を追う歴史探索の旅。",
+        thumbnail_url: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=400&q=80",
+        has_real_reward: true,
+        real_reward_title: "OKATRI特製ステッカー",
+        reward_badge_title: "吉備の守護者"
+      }
+    ];
+  }
+
+  list.forEach(story => {
+    const prog = userStoryProgressData[story.id] || {};
+    const isCompleted = prog.is_completed === true;
+    const sceneCount = storyScenesData.filter(s => s.story_id === story.id).length;
+    const isOfficial = currentUser && currentUser.is_admin;
+
+    const card = document.createElement("div");
+    card.className = "story-card-item";
+    card.innerHTML = `
+      <div class="story-card-thumb-wrap">
+        <img src="${story.thumbnail_url || 'https://via.placeholder.com/300x180?text=STORY'}" onerror="this.src='https://via.placeholder.com/300x180?text=STORY'">
+        <span class="story-card-badge ${isCompleted ? 'cleared' : ''}">
+          ${isCompleted ? '✔ 完結' : (sceneCount > 0 ? `全${sceneCount}章` : '探索クエスト')}
+        </span>
+      </div>
+      <div class="story-card-body">
+        <div class="story-card-title">${story.title}</div>
+        <div class="story-card-footer">
+          <span>${story.has_real_reward ? '🎁 特典' : '🏆 バッジ'}</span>
+          <span>${isCompleted ? '特典・結果 ▶' : 'プレイ ▶'}</span>
+        </div>
+        ${isCompleted ? `
+          <div style="text-align:right; margin-top:4px;">
+            <button type="button" class="reset-story-link" style="background:none; border:none; font-size:9px; color:var(--text-muted); cursor:pointer; text-decoration:underline;">最初から読み直す</button>
+          </div>
+        ` : ''}
+        ${isOfficial ? `
+          <div class="story-card-admin-row">
+            <button type="button" class="story-card-admin-btn add-scene-btn"><i class="fa-solid fa-plus"></i> 追加</button>
+            <button type="button" class="story-card-admin-btn manage-scenes-btn"><i class="fa-solid fa-list"></i> 管理</button>
+            <button type="button" class="story-card-admin-btn show-qr-btn"><i class="fa-solid fa-qrcode"></i> QR</button>
+            <button type="button" class="story-card-admin-btn delete-story-btn" style="color:#ef4444;"><i class="fa-regular fa-trash-can"></i> 削除</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    // 本編または特典画面を開く
+    card.onclick = () => {
+      if (isCompleted && story.has_real_reward) {
+        currentStory = story;
+        completeStory();
+        document.getElementById("storyModal").classList.add("show");
+      } else {
+        startStory(story.id);
+      }
+    };
+
+    // 最初から読み直す
+    const resetBtn = card.querySelector(".reset-story-link");
+    if (resetBtn) {
+      resetBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`「${story.title}」の進行を最初に戻して読み直しますか？\n（※獲得したバッジや使用済み特典はそのまま保持されます）`)) {
+          saveStoryProgress(story.id, 0, false);
+          startStory(story.id);
+        }
+      };
+    }
+
+    // 公式専用 シーン追加モーダル起動
+    const addSceneBtn = card.querySelector(".add-scene-btn");
+    if (addSceneBtn) {
+      addSceneBtn.onclick = (e) => {
+        e.stopPropagation();
+        openAddSceneModal(story.id);
+      };
+    }
+    // 公式専用 物語削除
+    const delStoryBtn = card.querySelector(".delete-story-btn");
+    if (delStoryBtn) {
+      delStoryBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`物語「${story.title}」と、それに含まれる全てのシーンを削除しますか？`)) return;
+
+        storiesData = storiesData.filter(s => s.id !== story.id);
+        storyScenesData = storyScenesData.filter(s => s.story_id !== story.id);
+        renderStoriesList();
+
+        if (db) {
+          await db.from("stories").delete().eq("id", story.id);
+        }
+        alert("物語を削除しました。");
+      };
+    }
+    // 公式専用 QRコードモーダル起動
+    const qrBtn = card.querySelector(".show-qr-btn");
+    if (qrBtn) {
+      qrBtn.onclick = (e) => {
+        e.stopPropagation();
+        openStoryQrModal(story);
+      };
+    }
+    // 公式専用 登録シーン一覧管理モーダル起動
+    const manageBtn = card.querySelector(".manage-scenes-btn");
+    if (manageBtn) {
+      manageBtn.onclick = (e) => {
+        e.stopPropagation();
+        openManageScenesModal(story);
+      };
+    }
+
+    container.appendChild(card);
+  });
+}
 window.startStory = function(storyId) {
   // Supabaseから該当物語を検索（なければテスト用サンプルを起動）
   currentStory = storiesData.find(s => s.id === storyId) || {
@@ -4780,11 +5074,10 @@ function renderCurrentScene() {
     }
   }
 
-  // 3. 話者名とセリフの更新
+  // 3. 話者名とセリフの更新（タイプライター文字送り）
   const badge = document.getElementById("storySpeakerBadge");
-  const dialogue = document.getElementById("storyDialogueText");
   if (badge) badge.textContent = scene.speaker_name || "？？？";
-  if (dialogue) dialogue.textContent = scene.text || "";
+  typewriterStoryText(scene.text || "");
 
   // 4. ミッション画面の制御（GPSまたは謎解き）
   const overlay = document.getElementById("storyMissionOverlay");
@@ -4799,6 +5092,17 @@ function renderCurrentScene() {
     document.getElementById("storySpotName").textContent = scene.spot_name || "指定地";
     const sImg = document.getElementById("storySpotImg");
     if (sImg && scene.spot_image_url) sImg.src = scene.spot_image_url;
+
+    // ★ Googleマップ案内リンクの設定
+    const navLink = document.getElementById("storyNavMapLink");
+    if (navLink) {
+      if (scene.target_lat && scene.target_lng) {
+        navLink.href = `https://www.google.com/maps/dir/?api=1&destination=${scene.target_lat},${scene.target_lng}`;
+        navLink.style.display = "inline-flex";
+      } else {
+        navLink.style.display = "none";
+      }
+    }
 
     // チェックインボタンに判定イベントを設定
     document.getElementById("storyCheckInBtn").onclick = () => {
@@ -4826,11 +5130,43 @@ function renderCurrentScene() {
   saveStoryProgress(currentStory.id, currentSceneIndex, false);
 }
 
-// 画面タップで次へ進む処理
+// 画面タップで次へ進む処理（文字送りアニメーション対応）
+let storyTypewriterTimer = null;
+let isStoryTextTyping = false;
+let currentFullStoryText = "";
+
+function typewriterStoryText(text) {
+  const dialogue = document.getElementById("storyDialogueText");
+  if (!dialogue) return;
+  clearInterval(storyTypewriterTimer);
+  dialogue.textContent = "";
+  currentFullStoryText = text;
+  isStoryTextTyping = true;
+  let idx = 0;
+
+  storyTypewriterTimer = setInterval(() => {
+    if (idx < text.length) {
+      dialogue.textContent += text.charAt(idx);
+      idx++;
+    } else {
+      clearInterval(storyTypewriterTimer);
+      isStoryTextTyping = false;
+    }
+  }, 30); // 30ミリ秒ごとに1文字
+}
+
 function advanceStory() {
+  playStorySound("tap"); // ★ タップ音を再生
   const scene = currentStoryScenes[currentSceneIndex];
-  // チェックインまたは謎解きミッション中はタップ送り不可（クリアするまで待機）
   if (scene && (scene.scene_type === "checkin" || scene.scene_type === "quiz")) {
+    return;
+  }
+
+  // 文字送りアニメーション中のタップなら、一瞬で全文を表示
+  if (isStoryTextTyping) {
+    clearInterval(storyTypewriterTimer);
+    document.getElementById("storyDialogueText").textContent = currentFullStoryText;
+    isStoryTextTyping = false;
     return;
   }
 
@@ -4838,7 +5174,6 @@ function advanceStory() {
     currentSceneIndex++;
     renderCurrentScene();
   } else {
-    // 最終シーン到達でクエストクリア！
     completeStory();
   }
 }
@@ -4890,6 +5225,7 @@ function handleStoryQuizSubmit(scene) {
   }
 
   if (val === correct) {
+    playStorySound("correct"); // ★ 正解チャイムを再生
     alert("🎉 正解！暗号の謎を解き明かした！");
     document.getElementById("storyMissionOverlay").style.display = "none";
     currentSceneIndex++;
@@ -4901,6 +5237,7 @@ function handleStoryQuizSubmit(scene) {
 
 // クエストクリア＆現物チケット消し込み制御
 function completeStory() {
+  playStorySound("clear"); // ★ クリアファンファーレを再生
   saveStoryProgress(currentStory.id, currentStoryScenes.length, true);
 
   const clearOverlay = document.getElementById("storyClearOverlay");
@@ -4938,6 +5275,12 @@ function completeStory() {
     badgeArea.style.display = "none";
   }
 
+  // ゲストユーザーの場合は保存を促す案内を表示
+  const guestNotice = document.getElementById("storyGuestLoginNotice");
+  if (guestNotice) {
+    guestNotice.style.display = currentUser ? "none" : "block";
+  }
+
   // 2. 現物特典チケットの表示＆消し込み判定
   const ticketArea = document.getElementById("storyRealTicketArea");
   if (currentStory.has_real_reward) {
@@ -4960,13 +5303,16 @@ function updateTicketStatusUI(storyId) {
   const badge = document.getElementById("storyTicketStatusBadge");
   const btn = document.getElementById("claimRealRewardBtn");
 
+  const ticketCard = document.getElementById("storyRealTicketArea");
   if (isClaimed) {
+    if (ticketCard) ticketCard.classList.add("stamped"); // ★ 赤色「済」スタンプを表示
     badge.className = "ticket-status-badge used";
     badge.textContent = "✔ 使用済み（受取完了）";
     btn.className = "btn-ticket-claim claimed";
     btn.innerHTML = `<i class="fa-solid fa-check"></i> 受取済みです`;
     btn.disabled = true;
   } else {
+    if (ticketCard) ticketCard.classList.remove("stamped");
     badge.className = "ticket-status-badge unused";
     badge.textContent = "● 未使用チケット";
     btn.className = "btn-ticket-claim";
@@ -5005,6 +5351,226 @@ function saveStoryProgress(storyId, step, isDone) {
   userStoryProgressData[storyId] = current;
   localStorage.setItem("okatari_story_progress", JSON.stringify(userStoryProgressData));
 }
+// 公式用 シーン追加モーダル制御
+function openAddSceneModal(storyId) {
+  document.getElementById("sceneStoryId").value = storyId;
+  document.getElementById("addStorySceneForm").reset();
+  document.getElementById("sceneTypeSelect").value = "dialogue";
+  document.getElementById("sceneCheckinFields").style.display = "none";
+  document.getElementById("sceneQuizFields").style.display = "none";
+  document.getElementById("addStorySceneModal").classList.add("show");
+}
+
+safeOnClick("closeAddStorySceneModalBtn", () => document.getElementById("addStorySceneModal").classList.remove("show"));
+safeOnClick("cancelAddStorySceneBtn", () => document.getElementById("addStorySceneModal").classList.remove("show"));
+
+// シーン種類選択に応じた入力欄の切り替え
+const sceneTypeSelect = document.getElementById("sceneTypeSelect");
+if (sceneTypeSelect) {
+  sceneTypeSelect.onchange = (e) => {
+    const val = e.target.value;
+    document.getElementById("sceneCheckinFields").style.display = val === "checkin" ? "block" : "none";
+    document.getElementById("sceneQuizFields").style.display = val === "quiz" ? "block" : "none";
+  };
+}
+
+// シーン追加フォーム送信
+const sceneForm = document.getElementById("addStorySceneForm");
+if (sceneForm) {
+  sceneForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const storyId = document.getElementById("sceneStoryId").value;
+    const type = document.getElementById("sceneTypeSelect").value;
+    const bg = document.getElementById("sceneBgUrlInput").value.trim();
+    const chara = document.getElementById("sceneCharaUrlInput").value.trim();
+    const speaker = document.getElementById("sceneSpeakerInput").value.trim() || "案内人";
+    const text = document.getElementById("sceneTextInput").value.trim();
+
+    // 既存シーンの末尾の順番を計算
+    const existing = storyScenesData.filter(s => s.story_id === storyId);
+    const stepOrder = existing.length + 1;
+
+    const newScene = {
+      id: generateUniqueId("scene"),
+      story_id: storyId,
+      step_order: stepOrder,
+      scene_type: type,
+      bg_image_url: bg || "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=80",
+      chara_image_url: chara,
+      speaker_name: speaker,
+      text: text,
+      // GPS用
+      spot_name: document.getElementById("sceneSpotNameInput").value.trim(),
+      spot_image_url: document.getElementById("sceneSpotImgInput").value.trim(),
+      target_lat: parseFloat(document.getElementById("sceneLatInput").value) || null,
+      target_lng: parseFloat(document.getElementById("sceneLngInput").value) || null,
+      radius_m: 600,
+      // 謎解き用
+      quiz_question: document.getElementById("sceneQuizQInput").value.trim(),
+      quiz_answer: document.getElementById("sceneQuizAInput").value.trim()
+    };
+
+    storyScenesData.push(newScene);
+    renderStoriesList();
+
+    if (db) {
+      await db.from("story_scenes").insert([newScene]);
+    }
+
+    alert(`🎉 第${stepOrder}章のシーンを登録しました！`);
+    document.getElementById("addStorySceneModal").classList.remove("show");
+  };
+}
+// 公式専用 物語QRコードモーダルの制御
+function openStoryQrModal(story) {
+  const modal = document.getElementById("storyQrModal");
+  if (!modal) return;
+
+  const baseUrl = window.location.origin + window.location.pathname;
+  const storyUrl = `${baseUrl}?story=${encodeURIComponent(story.id)}`;
+  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(storyUrl)}`;
+
+  document.getElementById("storyQrModalTitle").textContent = `QR: ${story.title}`;
+  document.getElementById("storyQrImg").src = qrApiUrl;
+  document.getElementById("storyQrUrlInput").value = storyUrl;
+
+  // URLコピーボタン
+  safeOnClick("copyStoryQrUrlBtn", () => {
+    navigator.clipboard.writeText(storyUrl);
+    alert(`物語の起動URLをコピーしました！\n${storyUrl}`);
+  });
+
+  // QR画像ダウンロード用リンク
+  const dlBtn = document.getElementById("downloadStoryQrBtn");
+  if (dlBtn) dlBtn.href = qrApiUrl;
+
+  modal.classList.add("show");
+}
+
+safeOnClick("closeStoryQrModalBtn", () => {
+  document.getElementById("storyQrModal").classList.remove("show");
+});
+// ==========================================
+// ★ Web Audio API 効果音ジェネレーター（外部ファイル不要）
+// ==========================================
+function playStorySound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === "tap") {
+      // ピッ（タップ音）
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+    } else if (type === "correct") {
+      // ピンポン！（正解音）
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.12); // E5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } else if (type === "clear") {
+      // チャラララ〜ン（クリア音）
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0.08, ctx.currentTime + idx * 0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.4);
+        o.start(ctx.currentTime + idx * 0.1);
+        o.stop(ctx.currentTime + idx * 0.1 + 0.4);
+      });
+    }
+  } catch (e) {}
+}
+
+// 合言葉（コード入力）モーダルの制御
+safeOnClick("openStoryCodeModalBtn", () => {
+  document.getElementById("storyCodeForm").reset();
+  document.getElementById("storyCodeModal").classList.add("show");
+});
+safeOnClick("closeStoryCodeModalBtn", () => {
+  document.getElementById("storyCodeModal").classList.remove("show");
+});
+
+const storyCodeForm = document.getElementById("storyCodeForm");
+if (storyCodeForm) {
+  storyCodeForm.onsubmit = (e) => {
+    e.preventDefault();
+    const code = document.getElementById("storyCodeInput").value.trim();
+    if (!code) return;
+    document.getElementById("storyCodeModal").classList.remove("show");
+    startStory(code);
+  };
+}
+
+// 公式専用 シーン管理・確認・削除機能
+function openManageScenesModal(story) {
+  const modal = document.getElementById("manageStoryScenesModal");
+  const list = document.getElementById("manageScenesList");
+  if (!modal || !list) return;
+
+  document.getElementById("manageScenesModalTitle").textContent = `シーン管理: ${story.title}`;
+  list.innerHTML = "";
+
+  const scenes = storyScenesData.filter(s => s.story_id === story.id);
+  if (scenes.length === 0) {
+    list.innerHTML = `<div class="empty-state">登録されているシーンはありません</div>`;
+  } else {
+    scenes.forEach(scene => {
+      const row = document.createElement("div");
+      row.className = "clean-card-box";
+      row.style.padding = "10px 12px";
+      row.style.display = "flex";
+      row.style.justifyContent = "space-between";
+      row.style.alignItems = "center";
+
+      let typeBadge = '<span class="tech-badge">会話</span>';
+      if (scene.scene_type === "checkin") typeBadge = '<span class="tech-badge" style="background:#fef3c7; color:#b45309;">GPS</span>';
+      if (scene.scene_type === "quiz") typeBadge = '<span class="tech-badge" style="background:#e0e7ff; color:#4338ca;">謎解き</span>';
+
+      row.innerHTML = `
+        <div style="flex:1; min-width:0; margin-right:10px;">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+            <b style="font-size:12px;">第${scene.step_order}章</b>
+            ${typeBadge}
+            <span style="font-size:11px; color:var(--text-secondary);">${scene.speaker_name}</span>
+          </div>
+          <div style="font-size:12px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${scene.text}</div>
+        </div>
+        <button type="button" class="btn-danger del-scene-btn" style="padding:4px 8px; font-size:11px;">削除</button>
+      `;
+
+      row.querySelector(".del-scene-btn").onclick = async () => {
+        if (!confirm(`第${scene.step_order}章のシーンを削除しますか？`)) return;
+        storyScenesData = storyScenesData.filter(s => s.id !== scene.id);
+        if (db) await db.from("story_scenes").delete().eq("id", scene.id);
+        openManageScenesModal(story);
+        renderStoriesList();
+      };
+
+      list.appendChild(row);
+    });
+  }
+
+  modal.classList.add("show");
+}
+
+safeOnClick("closeManageScenesModalBtn", () => {
+  document.getElementById("manageStoryScenesModal").classList.remove("show");
+});
 
 // アプリ起動
 initApp();

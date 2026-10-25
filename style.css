@@ -1995,9 +1995,13 @@ body:has(#tabDm.active) .mobile-bottom-nav {
   z-index: 10 !important;
 }
 /* スマホ版：検索投稿 ＆ マイページ（投稿・保存済み）の3列グリッド表示 */
+#myProfileSpotsGrid.hidden {
+  display: none !important;
+}
+
 @media (max-width: 768px) {
   #discoverPostsGrid,
-  #myProfileSpotsGrid {
+  #myProfileSpotsGrid:not(.hidden) {
     display: grid !important;
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 2px !important; /* 写真同士の隙間 */
@@ -2920,4 +2924,180 @@ body:has(#tabDm.active) .mobile-bottom-nav {
   color: #ef4444;
   margin-top: 6px;
   line-height: 1.4;
+}
+/* ==========================================
+   物語一覧 横スクロール＆ミニカード
+========================================== */
+.story-h-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+  scrollbar-width: none;
+}
+.story-h-scroll::-webkit-scrollbar { display: none; }
+
+.story-card-item {
+  flex: 0 0 160px;
+  width: 160px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease;
+}
+.story-card-item:hover {
+  transform: translateY(-2px);
+}
+.story-card-thumb-wrap {
+  position: relative;
+  width: 100%;
+  height: 95px;
+  background: #1e293b;
+}
+.story-card-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.story-card-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(2px);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.story-card-badge.cleared {
+  background: #16a34a;
+}
+.story-card-body {
+  padding: 8px 10px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.story-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin-bottom: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.story-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--primary-accent);
+  font-weight: 600;
+}
+/* 現物チケット使用済み「済」スタンプ演出 */
+.clear-ticket-card {
+  position: relative;
+  overflow: hidden;
+}
+.clear-ticket-card.stamped::after {
+  content: "済";
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%) rotate(-15deg);
+  width: 70px;
+  height: 70px;
+  border: 4px double #dc2626;
+  color: #dc2626;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  animation: stampImpact 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes stampImpact {
+  from { transform: translateY(-50%) scale(2) rotate(-30deg); opacity: 0; }
+  to { transform: translateY(-50%) scale(1) rotate(-15deg); opacity: 1; }
+}
+
+/* 物語カード内の管理者操作エリア */
+.story-card-admin-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-subtle);
+}
+.story-card-admin-btn {
+  flex: 1;
+  background: #f1f5f9;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 3px 0;
+  cursor: pointer;
+  text-align: center;
+}
+.story-card-admin-btn:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+/* マイページ用 チケットカード */
+.my-ticket-item-card {
+  background: #ffffff;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.my-ticket-item-card.stamped::after {
+  content: "済";
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%) rotate(-15deg);
+  width: 60px;
+  height: 60px;
+  border: 3px double #dc2626;
+  color: #dc2626;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+.my-ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.my-ticket-from-story {
+  font-size: 11px;
+  color: var(--text-muted);
 }
