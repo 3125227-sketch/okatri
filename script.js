@@ -4888,14 +4888,18 @@ window.openPostShareModal = function(post) {
 // ==========================================
 // ★ OKATRI物語 コントローラー
 // ==========================================
-// 物語一覧（図鑑タブ内）の描画
 function renderStoriesList() {
   const container = document.getElementById("storyListContainer");
   if (!container) return;
   container.innerHTML = "";
 
-  // 一般公開されている物語のみ表示（is_hidden = true は除外）
-  let list = storiesData.filter(s => !s.is_hidden);
+  const isOfficial = currentUser && currentUser.is_admin;
+
+  // ★ 修正：公式アカウント（管理者）なら非公開（is_hidden）も含めて全表示
+  let list = storiesData.filter(s => {
+    if (isOfficial) return true;
+    return !s.is_hidden;
+  });
 
   // まだ登録がない場合のフォールバック（初期表示用）
   if (list.length === 0) {
@@ -4916,7 +4920,9 @@ function renderStoriesList() {
     const prog = userStoryProgressData[story.id] || {};
     const isCompleted = prog.is_completed === true;
     const sceneCount = storyScenesData.filter(s => s.story_id === story.id).length;
-    const isOfficial = currentUser && currentUser.is_admin;
+
+    // ★ 非公開バッジの表示制御
+    const hiddenBadge = story.is_hidden ? `<span class="tech-badge" style="background:#fee2e2; color:#dc2626; margin-left:6px;">🔒 非公開</span>` : '';
 
     const card = document.createElement("div");
     card.className = "story-card-item";
@@ -4928,7 +4934,7 @@ function renderStoriesList() {
         </span>
       </div>
       <div class="story-card-body">
-        <div class="story-card-title">${story.title}</div>
+        <div class="story-card-title">${story.title} ${hiddenBadge}</div>
         <div class="story-card-footer">
           <span>${story.has_real_reward ? '🎁 特典' : '🏆 バッジ'}</span>
           <span>${isCompleted ? '特典・結果 ▶' : 'プレイ ▶'}</span>
@@ -4972,7 +4978,7 @@ function renderStoriesList() {
       };
     }
 
-    // 公式専用 シーン追加モーダル起動
+    // 公式専用ボタン群のイベント設定...
     const addSceneBtn = card.querySelector(".add-scene-btn");
     if (addSceneBtn) {
       addSceneBtn.onclick = (e) => {
@@ -4980,7 +4986,6 @@ function renderStoriesList() {
         openAddSceneModal(story.id);
       };
     }
-    // 公式専用 物語削除
     const delStoryBtn = card.querySelector(".delete-story-btn");
     if (delStoryBtn) {
       delStoryBtn.onclick = async (e) => {
@@ -4997,7 +5002,6 @@ function renderStoriesList() {
         alert("物語を削除しました。");
       };
     }
-    // 公式専用 QRコードモーダル起動
     const qrBtn = card.querySelector(".show-qr-btn");
     if (qrBtn) {
       qrBtn.onclick = (e) => {
@@ -5005,7 +5009,6 @@ function renderStoriesList() {
         openStoryQrModal(story);
       };
     }
-    // 公式専用 登録シーン一覧管理モーダル起動
     const manageBtn = card.querySelector(".manage-scenes-btn");
     if (manageBtn) {
       manageBtn.onclick = (e) => {
@@ -5040,14 +5043,22 @@ function openStoryLogModal() {
     });
   }
 
+  // ★ 修正：物語モーダル(#storyModal)より前面に出るよう z-index と show クラスを付与
+  modal.style.zIndex = "100000";
   modal.style.display = "flex";
+  modal.classList.add("show");
+
   // ログの最下部へ自動スクロール
   list.scrollTop = list.scrollHeight;
 }
 
 safeOnClick("openStoryLogBtn", openStoryLogModal);
 safeOnClick("closeStoryLogBtn", () => {
-  document.getElementById("storyLogOverlay").style.display = "none";
+  const modal = document.getElementById("storyLogOverlay");
+  if (modal) {
+    modal.style.display = "none";
+    modal.classList.remove("show");
+  }
 });
 window.startStory = function(storyId) {
   // Supabaseから該当物語を検索（なければテスト用サンプルを起動）
