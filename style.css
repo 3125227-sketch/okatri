@@ -263,16 +263,38 @@ body {
    【スマホ用】ヘッダー ＆ ドロワー ＆ ボトムバー
 ========================================== */
 .mobile-header {
-  height: 50px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
+  flex-direction: column;
   background: #ffffff;
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 100;
+}
+.mobile-header-top {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  position: relative;
+  width: 100%;
+}
+.header-tabs-bar {
+  width: 100%;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+.header-tabs-bar .feed-tabs-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin: 0;
+  padding: 0 16px;
+  border-bottom: none;
+  background: transparent;
+  position: static;
 }
 .hamburger-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-primary); padding: 6px; z-index: 2; }
 .header-btn {
@@ -327,7 +349,18 @@ body {
 }
 
 @media (min-width: 900px) {
-  .mobile-header, .mobile-bottom-nav, .mobile-drawer, .drawer-overlay { display: none !important; }
+  .mobile-bottom-nav, .mobile-drawer, .drawer-overlay { display: none !important; }
+  .mobile-header {
+    border-bottom: none;
+    background: transparent;
+  }
+  .mobile-header-top {
+    display: none !important;
+  }
+  .header-tabs-bar {
+    background: var(--bg-page);
+    border-top: none;
+  }
 }
 @media (max-width: 899px) {
   .app-main { padding: 16px; padding-bottom: 75px; }

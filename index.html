@@ -94,11 +94,29 @@
     
     <!-- 【スマホ用】上部ヘッダー（完全中央揃え） -->
     <header class="mobile-header">
-      <button class="hamburger-btn" id="openDrawerBtn" title="メニュー"><i class="fa-solid fa-bars"></i></button>
-      <div class="header-title-centered" id="pageTitle">OKATRI</div>
-      <div class="notify-bell-wrap" id="mobileNotifyBellBtn" title="通知">
-        <i class="fa-regular fa-bell" style="font-size:18px; color:var(--text-primary);"></i>
-        <span class="notify-badge-count" id="mobileNotifyCount">0</span>
+      <div class="mobile-header-top">
+        <button class="hamburger-btn" id="openDrawerBtn" title="メニュー"><i class="fa-solid fa-bars"></i></button>
+        <div class="header-title-centered" id="pageTitle">OKATRI</div>
+        <div class="notify-bell-wrap" id="mobileNotifyBellBtn" title="通知">
+          <i class="fa-regular fa-bell" style="font-size:18px; color:var(--text-primary);"></i>
+          <span class="notify-badge-count" id="mobileNotifyCount">0</span>
+        </div>
+      </div>
+
+      <!-- ★ ヘッダー固定の切り替えバー -->
+      <div class="header-tabs-bar" id="headerTabsBar">
+        <!-- ホーム用切り替えバー -->
+        <div class="feed-tabs-container" id="headerHomeTabs">
+          <button class="feed-tab-underline active" id="sortNewestBtn">最新</button>
+          <button class="feed-tab-underline" id="sortPopularBtn">おすすめ</button>
+          <button class="feed-tab-underline" id="sortFollowingBtn">フォロー中</button>
+        </div>
+        <!-- 検索用切り替えバー -->
+        <div class="feed-tabs-container" id="headerDiscoverTabs" style="display:none;">
+          <button class="feed-tab-underline active" id="dTabPostsBtn">投稿</button>
+          <button class="feed-tab-underline" id="dTabRoutesBtn">ルート</button>
+          <button class="feed-tab-underline" id="dTabUsersBtn">ユーザー</button>
+        </div>
       </div>
     </header>
 
@@ -126,13 +144,6 @@
     <button class="time-mode-btn night-btn" id="setTimeNightBtn"><i class="fa-solid fa-moon"></i> 夜モード</button>
   </div>
 </div>
-        <!-- コントロールバー（ソート＆検索） -->
-        <div class="feed-tabs-container">
-          <button class="feed-tab-underline active" id="sortNewestBtn">最新</button>
-          <button class="feed-tab-underline" id="sortPopularBtn">おすすめ</button>
-          <button class="feed-tab-underline" id="sortFollowingBtn">フォロー中</button>
-        </div>
-
         <!-- 投稿グリッド（PC・スマホ両対応） -->
         <div class="spot-grid" id="spotGrid">
           <div class="empty-state">投稿データを読み込み中...</div>
@@ -270,13 +281,6 @@
         <div class="section-title-box">
           <h2 class="section-heading">見つける</h2>
           <p class="section-desc">スポット、モデルコース、ユーザーを探す</p>
-        </div>
-
-        <!-- 3段切り替えタブ -->
-       <div class="feed-tabs-container" style="margin-bottom:16px;">
-          <button class="feed-tab-underline active" id="dTabPostsBtn">投稿</button>
-          <button class="feed-tab-underline" id="dTabRoutesBtn">ルート</button>
-          <button class="feed-tab-underline" id="dTabUsersBtn">ユーザー</button>
         </div>
 
         <div class="search-box" style="margin-bottom:16px;">

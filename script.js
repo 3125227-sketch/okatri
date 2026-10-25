@@ -833,6 +833,26 @@ function setupNavigation() {
         pageTitle.textContent = textLabel || "OKATRI";
       }
 
+      // ★ 画面に応じた切り替えバーの出し分け（ホーム・検索以外は非表示）
+      const headerTabsBar = document.getElementById("headerTabsBar");
+      const headerHomeTabs = document.getElementById("headerHomeTabs");
+      const headerDiscoverTabs = document.getElementById("headerDiscoverTabs");
+
+      if (headerTabsBar) {
+        if (tabId === "tabPosts") {
+          headerTabsBar.style.display = "block";
+          if (headerHomeTabs) headerHomeTabs.style.display = "flex";
+          if (headerDiscoverTabs) headerDiscoverTabs.style.display = "none";
+        } else if (tabId === "tabAccounts") {
+          headerTabsBar.style.display = "block";
+          if (headerHomeTabs) headerHomeTabs.style.display = "none";
+          if (headerDiscoverTabs) headerDiscoverTabs.style.display = "flex";
+        } else {
+          // マップ・ルート・図鑑・マイページ・通知などでは切り替えバーを完全に隠す
+          headerTabsBar.style.display = "none";
+        }
+      }
+
       closeMobileDrawer();
 
       if (tabId === "tabArea" && mapInstance) {
