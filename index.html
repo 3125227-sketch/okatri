@@ -735,13 +735,15 @@
       </div>
 
       <div class="form-group">
-        <label>背景画像URL</label>
-        <input type="url" id="sceneBgUrlInput" placeholder="https://...">
+        <label>背景画像（Supabaseへ自動保存）</label>
+        <input type="file" id="sceneBgFileInput" accept="image/*">
+        <input type="url" id="sceneBgUrlInput" placeholder="または画像URLを直接入力" style="margin-top:6px;">
       </div>
 
       <div class="form-group">
-        <label>キャラクター立ち絵URL (透過PNG推奨)</label>
-        <input type="url" id="sceneCharaUrlInput" placeholder="https://...">
+        <label>キャラクター立ち絵（透過PNG推奨・Supabaseへ自動保存）</label>
+        <input type="file" id="sceneCharaFileInput" accept="image/*">
+        <input type="url" id="sceneCharaUrlInput" placeholder="または画像URLを直接入力" style="margin-top:6px;">
       </div>
 
       <div class="form-group">
@@ -761,8 +763,9 @@
           <input type="text" id="sceneSpotNameInput" placeholder="例: 岡山城天守閣前">
         </div>
         <div class="form-group">
-          <label>スポット写真URL</label>
-          <input type="url" id="sceneSpotImgInput" placeholder="https://...">
+          <label>スポット写真（Supabaseへ自動保存）</label>
+          <input type="file" id="sceneSpotImgFileInput" accept="image/*">
+          <input type="url" id="sceneSpotImgInput" placeholder="または画像URLを直接入力" style="margin-top:6px;">
         </div>
         <div class="form-row-2col">
           <div class="form-group">
@@ -826,7 +829,7 @@
 </div>
   <!-- 合言葉（シークレットコード）入力モーダル -->
 <div class="modal-backdrop" id="storyCodeModal">
-  <div class="modal-sheet" style="max-width:360px;">
+  <div class="modal-sheet story-code-sheet">
     <div class="modal-header">
       <h2>合言葉で物語を開始</h2>
       <button class="close-btn" id="closeStoryCodeModalBtn"><i class="fa-solid fa-xmark"></i></button>
@@ -1292,8 +1295,9 @@
         <textarea id="storyDescInput" rows="2" placeholder="物語の概要"></textarea>
       </div>
       <div class="form-group">
-        <label>サムネイル画像URL</label>
-        <input type="url" id="storyThumbInput" placeholder="https://...">
+        <label>サムネイル画像（Supabaseへ自動保存）</label>
+        <input type="file" id="storyThumbFileInput" accept="image/*">
+        <input type="url" id="storyThumbInput" placeholder="または画像URLを直接入力" style="margin-top:6px;">
       </div>
       <div class="form-group">
         <label>クリア報酬バッジ</label>

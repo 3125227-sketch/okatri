@@ -858,6 +858,7 @@ body:has(#tabDm.active) .mobile-bottom-nav {
 .modal-backdrop.show { display: flex; }
 
 .modal-sheet {
+  width: 100%; box-sizing: border-box;
   background: var(--bg-surface); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 20px 20px 70px;
   max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid var(--border-subtle);
 }
@@ -3182,4 +3183,15 @@ body:has(#tabDm.active) .mobile-bottom-nav {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);
+}
+/* 合言葉モーダルのレスポンシブ幅（スマホは右端まで100%・PCは中央固定） */
+.story-code-sheet {
+  width: 100% !important;
+}
+@media (min-width: 768px) {
+  .story-code-sheet {
+    max-width: 400px !important;
+    border-radius: var(--radius-lg) !important;
+    padding-bottom: 24px !important;
+  }
 }

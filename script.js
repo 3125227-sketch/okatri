@@ -520,6 +520,29 @@ async function uploadBgImageToStorage(file) {
   }
   return "";
 }
+// 物語用画像をSupabase Storageに保存する共通関数
+async function uploadStoryImageToStorage(file, folder = "stories") {
+  if (!db || !file) return "";
+  try {
+    const ext = file.name ? file.name.split('.').pop() : 'png';
+    const fileName = `${folder}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+    const filePath = `stories/${fileName}`;
+
+    const { error: uploadError } = await db.storage
+      .from('post_images')
+      .upload(filePath, file, { contentType: file.type || 'image/png', upsert: false });
+
+    if (!uploadError) {
+      const { data } = db.storage.from('post_images').getPublicUrl(filePath);
+      return data.publicUrl;
+    } else {
+      console.warn("Storage保存エラー:", uploadError.message);
+    }
+  } catch (err) {
+    console.warn("画像アップロード失敗:", err);
+  }
+  return "";
+}
 // ★ スタンプ画像をSupabase Storageに保存する関数
 async function uploadStickerImageToStorage(file) {
   if (!db || !file) return "";
@@ -3569,10 +3592,21 @@ function setupEventListeners() {
   if (storyForm) {
     storyForm.onsubmit = async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById("submitCreateStoryBtn");
+      if (submitBtn) { submitBtn.textContent = "画像保存中..."; submitBtn.disabled = true; }
+
       const sId = document.getElementById("storyIdInput").value.trim();
       const sTitle = document.getElementById("storyTitleInput").value.trim();
       const sDesc = document.getElementById("storyDescInput").value.trim();
-      const sThumb = document.getElementById("storyThumbInput").value.trim();
+      
+      // ★ ファイルがあればSupabaseへアップロード
+      const thumbFile = document.getElementById("storyThumbFileInput")?.files[0];
+      let sThumb = document.getElementById("storyThumbInput").value.trim();
+      if (thumbFile) {
+        const uploadedUrl = await uploadStoryImageToStorage(thumbFile, "thumb");
+        if (uploadedUrl) sThumb = uploadedUrl;
+      }
+
       const sBadge = document.getElementById("storyRewardBadgeSelect").value;
       const sHasReal = document.getElementById("storyHasRealReward").checked;
       const sRealTitle = document.getElementById("storyRealTitleInput").value.trim();
@@ -5423,10 +5457,34 @@ const sceneForm = document.getElementById("addStorySceneForm");
 if (sceneForm) {
   sceneForm.onsubmit = async (e) => {
     e.preventDefault();
+    const submitBtn = document.getElementById("submitAddStorySceneBtn");
+    if (submitBtn) { submitBtn.textContent = "画像アップロード中..."; submitBtn.disabled = true; }
+
     const storyId = document.getElementById("sceneStoryId").value;
     const type = document.getElementById("sceneTypeSelect").value;
-    const bg = document.getElementById("sceneBgUrlInput").value.trim();
-    const chara = document.getElementById("sceneCharaUrlInput").value.trim();
+
+    // ★ ファイルが選択されていればSupabase Storageへ自動アップロード
+    const bgFile = document.getElementById("sceneBgFileInput")?.files[0];
+    let bg = document.getElementById("sceneBgUrlInput").value.trim();
+    if (bgFile) {
+      const uBg = await uploadStoryImageToStorage(bgFile, "scene_bg");
+      if (uBg) bg = uBg;
+    }
+
+    const charaFile = document.getElementById("sceneCharaFileInput")?.files[0];
+    let chara = document.getElementById("sceneCharaUrlInput").value.trim();
+    if (charaFile) {
+      const uChara = await uploadStoryImageToStorage(charaFile, "scene_chara");
+      if (uChara) chara = uChara;
+    }
+
+    const spotFile = document.getElementById("sceneSpotImgFileInput")?.files[0];
+    let spotImg = document.getElementById("sceneSpotImgInput").value.trim();
+    if (spotFile) {
+      const uSpot = await uploadStoryImageToStorage(spotFile, "spot_img");
+      if (uSpot) spotImg = uSpot;
+    }
+
     const speaker = document.getElementById("sceneSpeakerInput").value.trim() || "案内人";
     const text = document.getElementById("sceneTextInput").value.trim();
 
@@ -5445,7 +5503,7 @@ if (sceneForm) {
       text: text,
       // GPS用
       spot_name: document.getElementById("sceneSpotNameInput").value.trim(),
-      spot_image_url: document.getElementById("sceneSpotImgInput").value.trim(),
+      spot_image_url: spotImg,
       target_lat: parseFloat(document.getElementById("sceneLatInput").value) || null,
       target_lng: parseFloat(document.getElementById("sceneLngInput").value) || null,
       radius_m: 600,
