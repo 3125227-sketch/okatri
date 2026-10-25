@@ -687,16 +687,29 @@ body {
 /* ==========================================
    DM専用ページ（余白ゼロ・フルフィットUI）
 ========================================== */
-#tabDm.active {
-  margin: -16px; /* スマホ時の親画面の余白を相殺して画面端まで広げる */
-}
-@media (min-width: 900px) {
+@media (max-width: 899px) {
+  /* DM表示時は親要素の余計な余白と外側スクロールをカット */
+  body:has(#tabDm.active) .app-main {
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+  
   #tabDm.active {
-    margin: -24px 0 0 0;
+    margin: 0 !important;
+    /* 上部ヘッダー（50px）を引いた高さにピッタリ合わせる */
+    height: calc(100vh - 50px) !important;
+    height: calc(100dvh - 50px) !important;
   }
 }
 
-/* DM画面が開いている時はスマホのボトムナビを隠して画面を最大限広く使う */
+@media (min-width: 900px) {
+  #tabDm.active {
+    margin: -24px 0 0 0;
+    height: 100vh;
+  }
+}
+
+/* DM画面が開いている時はスマホのボトムナビを隠す */
 body:has(#tabDm.active) .mobile-bottom-nav {
   display: none !important;
 }
@@ -704,9 +717,8 @@ body:has(#tabDm.active) .mobile-bottom-nav {
 .dm-page-wrapper {
   display: flex;
   flex-direction: column;
-  /* ★ ブラウザのタブバー・アドレスバーがあっても100%画面内に収まる高さ */
-  height: 100vh;
-  height: 100dvh;
+  width: 100%;
+  height: 100% !important; /* 親枠（ヘッダー下）にピッタリ100% */
   background: var(--bg-surface);
   border: none;
   border-radius: 0;
@@ -1492,20 +1504,31 @@ body:has(#tabDm.active) .mobile-bottom-nav {
   border-color: #0f172a;
 }
 /* ==========================================
-   【修正】切り替えバーの固定（スクロールしても一番上にとどまる）
+   切り替えバーの完全固定（スクロールしても上に残る）
 ========================================== */
 .feed-tabs-container {
   position: sticky;
   top: 0;
-  z-index: 30;
-  background: var(--bg-page); /* スクロール時に下が透けないように背景色を指定 */
+  z-index: 50;
+  background: var(--bg-page);
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 28px;
+  gap: 24px;
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 18px;
-  padding: 10px 0 0;
+  margin-bottom: 16px;
+  padding: 10px 16px 0 16px;
+  margin-left: -16px;
+  margin-right: -16px;
+}
+
+@media (min-width: 900px) {
+  .feed-tabs-container {
+    top: 0;
+    margin-left: -24px;
+    margin-right: -24px;
+    padding: 12px 24px 0 24px;
+  }
 }
 
 /* ==========================================
@@ -2358,8 +2381,11 @@ body:has(#tabDm.active) .mobile-bottom-nav {
 .insta-share-sheet {
   max-width: 480px !important;
   border-radius: 20px 20px 0 0 !important;
-  padding: 14px 16px 28px !important;
+  /* ★ 下部セーフエリア（ホームバー・ブラウザのバー）分をしっかり底上げ */
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 20px)) !important;
   box-sizing: border-box;
+  max-height: 85dvh !important;
+  overflow-y: auto !important;
 }
 
 /* フォロー中ユーザーの横スクロール一覧 */

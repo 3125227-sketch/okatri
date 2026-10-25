@@ -3634,18 +3634,27 @@ function setupEventListeners() {
   safeOnClick("closeEditPostModalBtn", () => document.getElementById("editPostModal").classList.remove("show"));
   safeOnClick("cancelEditPostBtn", () => document.getElementById("editPostModal").classList.remove("show"));
 
+  // ★ スクロールを一番上に戻す共通処理
+  function scrollToAppTop() {
+    const appMain = document.querySelector(".app-main");
+    if (appMain) appMain.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }
+
   // 最新
   safeOnClick("sortNewestBtn", () => {
     currentSortMode = "newest";
     updateFeedTabsUI("sortNewestBtn");
     applySortAndRender();
+    scrollToAppTop(); // ★ 一番上に戻す
   });
 
-  // 週間人気
+  // 週間人気（おすすめ）
   safeOnClick("sortPopularBtn", () => {
     currentSortMode = "popular";
     updateFeedTabsUI("sortPopularBtn");
     applySortAndRender();
+    scrollToAppTop(); // ★ 一番上に戻す
   });
 
   // フォロー中
@@ -3653,6 +3662,7 @@ function setupEventListeners() {
     currentSortMode = "following";
     updateFeedTabsUI("sortFollowingBtn");
     applySortAndRender();
+    scrollToAppTop(); // ★ 一番上に戻す
   });
 
   // タブの下線（active）切り替え関数
@@ -4356,6 +4366,7 @@ function setupEventListeners() {
     if (uSec) uSec.style.display = tab === "users" ? "block" : "none";
 
     renderDiscoverResults();
+    scrollToAppTop(); // ★ 検索タブ切り替え時も一番上に戻す
   }
 
   const dInput = document.getElementById("discoverSearchInput");
