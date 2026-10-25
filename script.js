@@ -535,6 +535,18 @@ async function sendNotification(toUserId, type, postId = null, postTitle = null)
     return;
   }
 
+  // ★ 相手の通知設定をチェック（オフに設定されている場合は送信しない）
+  const targetUser = allUsersData.find(u => u.user_id === targetId);
+  if (targetUser && targetUser.notify_settings) {
+    let s = targetUser.notify_settings;
+    if (typeof s === "string") {
+      try { s = JSON.parse(s); } catch(e) { s = {}; }
+    }
+    if (type === 'like' && s.likes === false) return;
+    if (type === 'comment' && s.comments === false) return;
+    if (type === 'follow' && s.follows === false) return;
+  }
+
   const newNotify = {
     id: generateUniqueId("notif"),
     to_user_id: targetId,
@@ -598,7 +610,6 @@ async function fetchNotifications() {
         .limit(30);
 
       if (!error && data && data.length > 0) {
-        // 重複を除いてマージ
         data.forEach(dbItem => {
           if (!mergedNotifs.some(m => m.id === dbItem.id)) {
             mergedNotifs.push(dbItem);
@@ -608,6 +619,39 @@ async function fetchNotifications() {
     } catch(err) {
       console.warn("DB通知同期エラー:", err);
     }
+  }
+
+  // ★ 既読をつけた通知が1日（24時間）経過したら自動で消去する処理
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  mergedNotifs = mergedNotifs.filter(n => {
+    // 未読のものは1日経っても残す
+    if (!n.is_read) return true;
+    // 既読のものは24時間以内のみ残す（24時間経過したものは除外）
+    const time = new Date(n.created_at || 0).getTime();
+    return (now - time) <= ONE_DAY_MS;
+  });
+
+  // 古い既読通知をローカル・DBからも自動クリーンアップ
+  try {
+    let localPool = JSON.parse(localStorage.getItem("okatari_global_notifications") || "[]");
+    localPool = localPool.filter(n => {
+      if ((n.to_user_id || "").trim() !== myId) return true;
+      if (!n.is_read) return true;
+      return (now - new Date(n.created_at || 0).getTime()) <= ONE_DAY_MS;
+    });
+    localStorage.setItem("okatari_global_notifications", JSON.stringify(localPool));
+  } catch(e) {}
+
+  if (db) {
+    const oneDayAgoIso = new Date(now - ONE_DAY_MS).toISOString();
+    db.from("notifications")
+      .delete()
+      .eq("to_user_id", myId)
+      .eq("is_read", true)
+      .lt("created_at", oneDayAgoIso)
+      .then(() => {});
   }
 
   // 作成日時順に並び替え
@@ -688,7 +732,19 @@ function renderNotificationsPage() {
       return;
     }
 
+    // 自分の現在の通知設定を取得
+    let mySettings = currentUser ? currentUser.notify_settings : null;
+    if (typeof mySettings === "string") {
+      try { mySettings = JSON.parse(mySettings); } catch(e) { mySettings = null; }
+    }
+    mySettings = mySettings || { likes: true, comments: true, follows: true };
+
     notificationsData.forEach(n => {
+      // ★ 自分がOFFにしている通知は表示しない
+      if (n.type === 'like' && mySettings.likes === false) return;
+      if (n.type === 'comment' && mySettings.comments === false) return;
+      if (n.type === 'follow' && mySettings.follows === false) return;
+
       const item = document.createElement("div");
       item.className = `notify-item ${n.is_read ? '' : 'unread'}`;
       item.style.cursor = "pointer";
@@ -873,8 +929,12 @@ function openSettingsPage() {
   if (bio) bio.value = currentUser.bio || "";
   if (emailEl) emailEl.value = currentUser.email || "";
 
-  if (currentUser.notify_settings) {
-    const s = currentUser.notify_settings;
+  if (currentUser) {
+    let s = currentUser.notify_settings;
+    if (typeof s === "string") {
+      try { s = JSON.parse(s); } catch(e) { s = null; }
+    }
+    s = s || { likes: true, comments: true, follows: true };
     if (nLikes) nLikes.checked = s.likes !== false;
     if (nCmts) nCmts.checked = s.comments !== false;
     if (nFollows) nFollows.checked = s.follows !== false;
@@ -1060,14 +1120,60 @@ function updateMapMarkers(filterQuery = "") {
       const lat = parseFloat(p.lat);
       const lng = parseFloat(p.lng);
       if (lat >= 34.0 && lat <= 35.6 && lng >= 133.0 && lng <= 134.8) {
-        const marker = L.marker([lat, lng]).addTo(mapInstance);
+        // ★ このスポットが開催中スタンプラリーの対象か判定
+        let targetRally = null;
+        let targetRallySpot = null;
+        const userStamps = (currentUser && currentUser.stamps) || [];
+
+        (stampRalliesData || []).forEach(r => {
+          const spots = parseArray(r.spots);
+          const found = spots.find(s => s.id === p.id || s.name === p.title);
+          if (found) {
+            targetRally = r;
+            targetRallySpot = found;
+          }
+        });
+
+        let marker = null;
+        let checkInBtnHtml = '';
+
+        if (targetRallySpot) {
+          // スタンプラリー対象スポットの場合：ゴールド（済ならグリーン）の専用ピンを作成
+          const isCleared = userStamps.includes(targetRallySpot.id);
+          const stampIcon = L.divIcon({
+            className: 'custom-stamp-marker',
+            html: `<div class="stamp-pin ${isCleared ? 'cleared' : ''}" title="スタンプラリー対象スポット"><i class="fa-solid fa-stamp"></i></div>`,
+            iconSize: [34, 34],
+            iconAnchor: [17, 34],
+            popupAnchor: [0, -32]
+          });
+          marker = L.marker([lat, lng], { icon: stampIcon }).addTo(mapInstance);
+
+          // ポップアップ内にチェックインボタンまたは獲得済みバッジを配置
+          if (isCleared) {
+            checkInBtnHtml = `<div style="margin-top:6px; color:#10b981; font-weight:700; font-size:11px;"><i class="fa-solid fa-check"></i> スタンプ獲得済み</div>`;
+          } else {
+            checkInBtnHtml = `
+              <button onclick="checkInFromMapMarker('${targetRally.id}', '${targetRallySpot.id}', '${targetRallySpot.name}', ${targetRallySpot.lat || lat}, ${targetRallySpot.lng || lng}, ${targetRallySpot.radius_m || 600})" 
+                style="margin-top:6px; width:100%; background:var(--primary-accent); color:#fff; border:none; padding:6px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">
+                <i class="fa-solid fa-location-crosshairs"></i> チェックイン
+              </button>
+            `;
+          }
+        } else {
+          // 通常スポットの場合（標準の青ピン）
+          marker = L.marker([lat, lng]).addTo(mapInstance);
+        }
+
         const mainImg = (p.images && p.images[0]) || p.image_url || 'https://via.placeholder.com/140x80?text=OKATRI';
         const popupHtml = `
-          <div style="font-size:12px; min-width:140px; text-align:center;">
+          <div style="font-size:12px; min-width:150px; text-align:center;">
             <img src="${mainImg}" onerror="this.src='https://via.placeholder.com/140x80?text=OKATRI'" style="width:100%; height:80px; object-fit:cover; border-radius:4px; margin-bottom:6px;">
+            ${targetRallySpot ? `<div style="font-size:10px; color:#d97706; font-weight:700; margin-bottom:2px;">📍 ${targetRally.title}</div>` : ''}
             <b style="font-size:13px;">${p.title}</b><br>
             <span style="color:var(--text-secondary); font-size:11px;">${p.address}</span><br>
-            <button onclick="openDetailFromMap('${p.id}')" style="margin-top:6px; background:#0f172a; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer;">詳細を見る</button>
+            ${checkInBtnHtml}
+            <button onclick="openDetailFromMap('${p.id}')" style="margin-top:4px; background:#0f172a; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; cursor:pointer; width:100%;">詳細を見る</button>
           </div>
         `;
         marker.bindPopup(popupHtml);
@@ -1114,6 +1220,70 @@ function renderPickups() {
 window.openDetailFromMap = function(postId) {
   const post = postsData.find(p => p.id === postId);
   if (post) openDetail(post);
+};
+
+// ★ マップのピンから直接チェックインを実行する関数
+window.checkInFromMapMarker = function(rallyId, spotId, spotName, spotLat, spotLng, radiusM) {
+  if (!currentUser) { alert("スタンプラリーのチェックインにはログインが必要です"); return; }
+  if (!navigator.geolocation) { alert("GPS機能が利用できません"); return; }
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const userLat = pos.coords.latitude;
+    const userLng = pos.coords.longitude;
+    const dist = calculateDistance(userLat, userLng, spotLat, spotLng);
+
+    // 指定範囲内（約600m以内）にいるか判定
+    if (dist <= (radiusM || 600)) {
+      currentUser.stamps = currentUser.stamps || [];
+      if (!currentUser.stamps.includes(spotId)) {
+        currentUser.stamps.push(spotId);
+      }
+
+      // スタンプラリー達成判定
+      const rally = (stampRalliesData || []).find(r => r.id === rallyId);
+      if (rally) {
+        const spots = parseArray(rally.spots);
+        const allDone = spots.every(s => currentUser.stamps.includes(s.id));
+        if (allDone) {
+          currentUser.achievements = currentUser.achievements || [];
+          const masterBadge = masterBadgesData.find(b => b.title === rally.reward_title) || {
+            title: rally.reward_title,
+            image_url: rally.reward_img || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=150&q=80",
+            description: `${rally.title}を全制覇した証`
+          };
+
+          if (!currentUser.achievements.some(a => a.title === masterBadge.title)) {
+            currentUser.achievements.push({
+              title: masterBadge.title,
+              image_url: masterBadge.image_url,
+              description: masterBadge.description,
+              date: new Date().toLocaleDateString("ja-JP")
+            });
+            alert(`🏆 おめでとうございます！\nスタンプラリー完全制覇でアチーブメント「${masterBadge.title}」を獲得しました！`);
+          }
+        }
+      }
+
+      localStorage.setItem("okatari_user", JSON.stringify(currentUser));
+      updateMapMarkers(); // ピンの色をグリーン（獲得済み）に更新
+      renderStampRallies();
+      renderMyAchievements();
+      renderPokedex();
+
+      if (db) {
+        await db.from("users_custom").update({
+          stamps: currentUser.stamps,
+          achievements: currentUser.achievements
+        }).eq("user_id", currentUser.userId);
+      }
+
+      alert(`🎉 チェックイン成功！\n【${spotName}】のスタンプを獲得しました！`);
+    } else {
+      alert(`⚠️ チェックインできませんでした。\n現在地は【${spotName}】から約 ${Math.round(dist)}m 離れています。\n（約 ${radiusM || 600}m 以内に近づいてからお試しください）`);
+    }
+  }, (err) => {
+    alert("位置情報の取得に失敗しました。スマホのGPS設定をご確認ください。");
+  }, { enableHighAccuracy: true, timeout: 8000 });
 };
 
 // // ====================================================
@@ -2822,22 +2992,41 @@ function fetchBackgroundLocation() {
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${currentLatitude}&lon=${currentLongitude}`);
       const data = await res.json();
-      if (data && data.display_name) {
+      if (data) {
         const addrInput = document.getElementById("postAddress");
-        if (addrInput) addrInput.value = data.display_name;
         const areaSelect = document.getElementById("postArea");
-        const addr = data.display_name;
+        const addr = data.display_name || "";
+        const details = data.address || {};
+
+        if (addrInput) addrInput.value = addr;
+
         if (areaSelect) {
-          const areas = [
-            "岡山市北区", "岡山市中区", "岡山市東区", "岡山市南区",
-            "倉敷市", "津山市", "玉野市", "笠岡市", "井原市", "総社市", "高梁市", "新見市",
-            "備前市", "瀬戸内市", "赤磐市", "真庭市", "美作市", "浅口市",
-            "和気町", "早島町", "里庄町", "矢掛町", "鏡野町", "勝央町", "奈義町", "久米南町", "美咲町", "吉備中央町",
-            "新庄村", "西粟倉村"
-          ];
-          const found = areas.find(a => addr.includes(a.replace(/市|区|町|村/g, '')));
-          if (found) {
-            areaSelect.value = found;
+          // 判定用テキスト（全体住所 ＋ 行政区や市町村の詳細データ）
+          const fullText = `${addr} ${details.city_district || ''} ${details.suburb || ''} ${details.ward || ''} ${details.city || ''}`;
+
+          // ★ 1. 岡山市の区を優先判定
+          if (fullText.includes("北区")) {
+            areaSelect.value = "岡山市北区";
+          } else if (fullText.includes("中区")) {
+            areaSelect.value = "岡山市中区";
+          } else if (fullText.includes("東区")) {
+            areaSelect.value = "岡山市東区";
+          } else if (fullText.includes("南区")) {
+            areaSelect.value = "岡山市南区";
+          } else if (fullText.includes("岡山市")) {
+            areaSelect.value = "岡山市北区"; // 区が特定できない場合は中心の北区をセット
+          } else {
+            // ★ 2. 岡山市以外の市町村を判定
+            const otherAreas = [
+              "倉敷市", "津山市", "玉野市", "笠岡市", "井原市", "総社市", "高梁市", "新見市",
+              "備前市", "瀬戸内市", "赤磐市", "真庭市", "美作市", "浅口市",
+              "和気町", "早島町", "里庄町", "矢掛町", "鏡野町", "勝央町", "奈義町", "久米南町", "美咲町", "吉備中央町",
+              "新庄村", "西粟倉村"
+            ];
+            const found = otherAreas.find(a => fullText.includes(a) || fullText.includes(a.replace(/市|町|村/g, '')));
+            if (found) {
+              areaSelect.value = found;
+            }
           }
         }
       }
