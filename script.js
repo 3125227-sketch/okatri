@@ -5561,13 +5561,21 @@ function saveStoryProgress(storyId, step, isDone) {
   userStoryProgressData[storyId] = current;
   localStorage.setItem("okatari_story_progress", JSON.stringify(userStoryProgressData));
 }
-// 公式用 シーン追加モーダル制御
+// 公式用 シーン追加モーダル制御（ボタン状態をリセット）
 function openAddSceneModal(storyId) {
   document.getElementById("sceneStoryId").value = storyId;
   document.getElementById("addStorySceneForm").reset();
   document.getElementById("sceneTypeSelect").value = "dialogue";
   document.getElementById("sceneCheckinFields").style.display = "none";
   document.getElementById("sceneQuizFields").style.display = "none";
+
+  // ★ 送信ボタンの状態を確実に初期化
+  const submitBtn = document.getElementById("submitAddStorySceneBtn");
+  if (submitBtn) {
+    submitBtn.textContent = "シーンを登録";
+    submitBtn.disabled = false;
+  }
+
   // ★ 追加：この物語内で既に使用されている背景・立ち絵を選択肢にセット
   const bgPresetSelect = document.getElementById("sceneBgPresetSelect");
   const charaPresetSelect = document.getElementById("sceneCharaPresetSelect");
@@ -5608,7 +5616,7 @@ if (sceneTypeSelect) {
   };
 }
 
-// シーン追加フォーム送信
+// シーン追加フォーム送信（完了・エラー時にボタンを正常化）
 const sceneForm = document.getElementById("addStorySceneForm");
 if (sceneForm) {
   sceneForm.onsubmit = async (e) => {
@@ -5616,67 +5624,76 @@ if (sceneForm) {
     const submitBtn = document.getElementById("submitAddStorySceneBtn");
     if (submitBtn) { submitBtn.textContent = "画像アップロード中..."; submitBtn.disabled = true; }
 
-    const storyId = document.getElementById("sceneStoryId").value;
-    const type = document.getElementById("sceneTypeSelect").value;
+    try {
+      const storyId = document.getElementById("sceneStoryId").value;
+      const type = document.getElementById("sceneTypeSelect").value;
 
-    // ★ ファイルが選択されていればSupabase Storageへ自動アップロード
-    const bgFile = document.getElementById("sceneBgFileInput")?.files[0];
-    let bg = document.getElementById("sceneBgUrlInput").value.trim();
-    if (bgFile) {
-      const uBg = await uploadStoryImageToStorage(bgFile, "scene_bg");
-      if (uBg) bg = uBg;
+      // ★ ファイルが選択されていればSupabase Storageへ自動アップロード
+      const bgFile = document.getElementById("sceneBgFileInput")?.files[0];
+      let bg = document.getElementById("sceneBgUrlInput").value.trim();
+      if (bgFile) {
+        const uBg = await uploadStoryImageToStorage(bgFile, "scene_bg");
+        if (uBg) bg = uBg;
+      }
+
+      const charaFile = document.getElementById("sceneCharaFileInput")?.files[0];
+      let chara = document.getElementById("sceneCharaUrlInput").value.trim();
+      if (charaFile) {
+        const uChara = await uploadStoryImageToStorage(charaFile, "scene_chara");
+        if (uChara) chara = uChara;
+      }
+
+      const spotFile = document.getElementById("sceneSpotImgFileInput")?.files[0];
+      let spotImg = document.getElementById("sceneSpotImgInput").value.trim();
+      if (spotFile) {
+        const uSpot = await uploadStoryImageToStorage(spotFile, "spot_img");
+        if (uSpot) spotImg = uSpot;
+      }
+
+      const speaker = document.getElementById("sceneSpeakerInput").value.trim() || "案内人";
+      const text = document.getElementById("sceneTextInput").value.trim();
+
+      // 既存シーンの末尾の順番を計算
+      const existing = storyScenesData.filter(s => s.story_id === storyId);
+      const stepOrder = existing.length + 1;
+
+      const newScene = {
+        id: generateUniqueId("scene"),
+        story_id: storyId,
+        step_order: stepOrder,
+        scene_type: type,
+        bg_image_url: bg || "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=80",
+        chara_image_url: chara,
+        speaker_name: speaker,
+        text: text,
+        // GPS用
+        spot_name: document.getElementById("sceneSpotNameInput").value.trim(),
+        spot_image_url: spotImg,
+        target_lat: parseFloat(document.getElementById("sceneLatInput").value) || null,
+        target_lng: parseFloat(document.getElementById("sceneLngInput").value) || null,
+        radius_m: 600,
+        // 謎解き用
+        quiz_question: document.getElementById("sceneQuizQInput").value.trim(),
+        quiz_answer: document.getElementById("sceneQuizAInput").value.trim()
+      };
+
+      storyScenesData.push(newScene);
+      renderStoriesList();
+
+      if (db) {
+        await db.from("story_scenes").insert([newScene]);
+      }
+
+      alert(`🎉 第${stepOrder}章のシーンを登録しました！`);
+      document.getElementById("addStorySceneModal").classList.remove("show");
+    } catch (err) {
+      alert("シーン登録エラーが発生しました: " + err.message);
+    } finally {
+      if (submitBtn) {
+        submitBtn.textContent = "シーンを登録";
+        submitBtn.disabled = false;
+      }
     }
-
-    const charaFile = document.getElementById("sceneCharaFileInput")?.files[0];
-    let chara = document.getElementById("sceneCharaUrlInput").value.trim();
-    if (charaFile) {
-      const uChara = await uploadStoryImageToStorage(charaFile, "scene_chara");
-      if (uChara) chara = uChara;
-    }
-
-    const spotFile = document.getElementById("sceneSpotImgFileInput")?.files[0];
-    let spotImg = document.getElementById("sceneSpotImgInput").value.trim();
-    if (spotFile) {
-      const uSpot = await uploadStoryImageToStorage(spotFile, "spot_img");
-      if (uSpot) spotImg = uSpot;
-    }
-
-    const speaker = document.getElementById("sceneSpeakerInput").value.trim() || "案内人";
-    const text = document.getElementById("sceneTextInput").value.trim();
-
-    // 既存シーンの末尾の順番を計算
-    const existing = storyScenesData.filter(s => s.story_id === storyId);
-    const stepOrder = existing.length + 1;
-
-    const newScene = {
-      id: generateUniqueId("scene"),
-      story_id: storyId,
-      step_order: stepOrder,
-      scene_type: type,
-      bg_image_url: bg || "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=1200&q=80",
-      chara_image_url: chara,
-      speaker_name: speaker,
-      text: text,
-      // GPS用
-      spot_name: document.getElementById("sceneSpotNameInput").value.trim(),
-      spot_image_url: spotImg,
-      target_lat: parseFloat(document.getElementById("sceneLatInput").value) || null,
-      target_lng: parseFloat(document.getElementById("sceneLngInput").value) || null,
-      radius_m: 600,
-      // 謎解き用
-      quiz_question: document.getElementById("sceneQuizQInput").value.trim(),
-      quiz_answer: document.getElementById("sceneQuizAInput").value.trim()
-    };
-
-    storyScenesData.push(newScene);
-    renderStoriesList();
-
-    if (db) {
-      await db.from("story_scenes").insert([newScene]);
-    }
-
-    alert(`🎉 第${stepOrder}章のシーンを登録しました！`);
-    document.getElementById("addStorySceneModal").classList.remove("show");
   };
 }
 // 公式専用 物語QRコードモーダルの制御
