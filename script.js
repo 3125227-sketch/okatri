@@ -3645,7 +3645,7 @@ function setupEventListeners() {
       document.getElementById("createStickerModal").classList.remove("show");
     };
   }
-  // ★ 公式専用 物語作成モーダルの開閉
+  // ★ 公式専用 物語作成モーダルの開閉（ボタンの状態も初期状態にリセット）
   safeOnClick("openCreateStoryModalBtn", () => {
     const sel = document.getElementById("storyRewardBadgeSelect");
     if (sel) {
@@ -3653,6 +3653,13 @@ function setupEventListeners() {
     }
     document.getElementById("createStoryForm").reset();
     document.getElementById("realRewardFields").style.display = "none";
+
+    const submitBtn = document.getElementById("submitCreateStoryBtn");
+    if (submitBtn) {
+      submitBtn.textContent = "物語を登録";
+      submitBtn.disabled = false;
+    }
+
     document.getElementById("createStoryModal").classList.add("show");
   });
   safeOnClick("closeCreateStoryModalBtn", () => document.getElementById("createStoryModal").classList.remove("show"));
@@ -3704,15 +3711,24 @@ function setupEventListeners() {
         is_hidden: sIsHidden
       };
 
-      storiesData.unshift(newStory);
-      renderStoriesList();
+      try {
+        storiesData.unshift(newStory);
+        renderStoriesList();
 
-      if (db) {
-        await db.from("stories").insert([newStory]);
+        if (db) {
+          await db.from("stories").insert([newStory]);
+        }
+
+        alert(`🎉 物語「${sTitle}」を登録しました！${sIsHidden ? '\n（※隠し物語のため、一覧には非表示となります）' : ''}`);
+        document.getElementById("createStoryModal").classList.remove("show");
+      } catch (err) {
+        alert("登録エラーが発生しました: " + err.message);
+      } finally {
+        if (submitBtn) {
+          submitBtn.textContent = "物語を登録";
+          submitBtn.disabled = false;
+        }
       }
-
-      alert(`🎉 物語「${sTitle}」を登録しました！${sIsHidden ? '\n（※隠し物語のため、一覧には非表示となります）' : ''}`);
-      document.getElementById("createStoryModal").classList.remove("show");
     };
   }
 
@@ -5038,8 +5054,11 @@ function renderStoriesList() {
       </div>
     `;
 
-    // 本編または特典画面を開く
-    card.onclick = () => {
+    // 本編または特典画面を開く（管理ボタンが押された時は開かないようガード）
+    card.onclick = (e) => {
+      if (e.target.closest('.story-card-admin-row') || e.target.closest('button')) {
+        return;
+      }
       if (isCompleted && story.has_real_reward) {
         currentStory = story;
         completeStory();
@@ -5054,10 +5073,21 @@ function renderStoriesList() {
     if (resetBtn) {
       resetBtn.onclick = (e) => {
         e.stopPropagation();
+        e.preventDefault();
         if (confirm(`「${story.title}」の進行を最初に戻して読み直しますか？\n（※獲得したバッジや使用済み特典はそのまま保持されます）`)) {
           saveStoryProgress(story.id, 0, false);
           startStory(story.id);
         }
+      };
+    }
+
+    // 公式専用ボタン群のイベント設定...
+    const addSceneBtn = card.querySelector(".add-scene-btn");
+    if (addSceneBtn) {
+      addSceneBtn.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        openAddSceneModal(story.id);
       };
     }
 
