@@ -2,6 +2,9 @@
 const SUPABASE_URL = "https://dkbcnzrniknrvnflnytc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_-R_mW2C1dAA-ODy1eg8L6g_lQ5h4DHQ";
 const GEMINI_API_KEY = "AIzaSyBUpcoiqVlF5u_PhZR64ZblNk4HU326GFs";
+// ★ Cloudinary設定（メモした2つの値を入力してください）
+const CLOUDINARY_CLOUD_NAME = "w5wytwy6";
+const CLOUDINARY_UPLOAD_PRESET = "okatri";
 
 // ★ EmailJSの設定（無料登録で取得できるキー）
 const EMAILJS_PUBLIC_KEY = "A_66hCDRYd81RE6r4"; // 例: "uXyZ_abc123..."
@@ -189,24 +192,43 @@ function isInsideOkayama(lat, lng, address) {
   );
   return inCoords || inAddress;
 }
+// ★ 住所ジオコーディングのローカルキャッシュ管理
+const GEO_CACHE_KEY = "okatri_geocode_cache";
+function getGeoCache() {
+  try { return JSON.parse(localStorage.getItem(GEO_CACHE_KEY)) || {}; } catch(e) { return {}; }
+}
+function saveGeoCache(addr, coords) {
+  try {
+    const cache = getGeoCache();
+    cache[addr] = coords;
+    localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
+  } catch(e) {}
+}
 
 async function geocodeAddress(address) {
   if (!address || address.trim() === "") return null;
 
+  const rawKey = address.trim();
+  // ★ キャッシュをチェック（過去に検索済みなら外部APIを叩かず即座に返す）
+  const cache = getGeoCache();
+  if (cache[rawKey]) {
+    return cache[rawKey];
+  }
+
   // ① 住所の整形（郵便番号の削除・全角数字ハイフンの半角化）
-  let clean = address.trim();
+  let clean = rawKey;
   clean = clean.replace(/〒?\s*\d{3}-\d{4}/g, "").replace(/〒/g, "").trim();
   clean = clean.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
   clean = clean.replace(/[－―ー–—〜]/g, "-").trim();
 
-  // ② 番地を取り除いた「町名レベル」の文字列を作成（例: 岡山市北区駅元町1-1 -> 岡山市北区駅元町）
+  // ② 番地を取り除いた「町名レベル」の文字列を作成
   const noNumbers = clean.replace(/[\d-ー〜−]+.*$/, "").trim();
 
   // 検索クエリのフォールバック優先順位
   const candidateQueries = [];
-  candidateQueries.push(clean); // 1. 入力されたままの住所
+  candidateQueries.push(clean);
   if (noNumbers && noNumbers !== clean && noNumbers.length >= 3) {
-    candidateQueries.push(noNumbers); // 2. 番地を除いた町名レベル
+    candidateQueries.push(noNumbers);
   }
   if (!clean.includes("岡山")) {
     candidateQueries.push(`岡山県 ${clean}`);
@@ -223,21 +245,22 @@ async function geocodeAddress(address) {
       const data = await res.json();
 
       if (data && data.length > 0) {
-        // 「北区」や「岡山市」全体の広域中心点 (administrative) ではなく、町名やスポット単位の結果を優先採用
         const match = data.find(item => {
           const lat = parseFloat(item.lat);
           const lng = parseFloat(item.lon);
           const inOkayama = (lat >= 34.2 && lat <= 35.4 && lng >= 133.2 && lng <= 134.5);
-          // 行政区全体・都道府県全体などの大雑把なヒットを撥ねる
           const isTooBroad = (item.type === "administrative" || item.addresstype === "administrative" || item.type === "state");
           return inOkayama && !isTooBroad;
         });
 
         if (match) {
-          return {
+          const resultCoords = {
             lat: parseFloat(match.lat),
             lng: parseFloat(match.lon)
           };
+          // ★ 検索成功結果をキャッシュに保存
+          saveGeoCache(rawKey, resultCoords);
+          return resultCoords;
         }
       }
     } catch (e) {
@@ -318,9 +341,10 @@ async function initApp() {
     };
 
     try {
-      const [users, comments, pickups, news, aiSpots, badges, about, rallies, routes, dbStickers, dbStories, dbScenes] = await Promise.all([
-        safeFetch(db.from("users_custom").select("*"), []),
-        safeFetch(db.from("comments").select("*").order("created_at", { ascending: true }), []),
+      const [users, pickups, news, aiSpots, badges, about, rallies, routes, dbStickers, dbStories, dbScenes] = await Promise.all([
+        // ★ パスワード(password)とメール(email)を除外した公開情報のみ取得（セキュリティ保護）
+        safeFetch(db.from("users_custom").select("user_id, nickname, avatar, bio, is_admin, following, followers, bookmarks, achievements, featured_badges, stamps, blocked_users, muted_users"), []),
+        // ※ commentsの一括全件読み込みは廃止（各投稿を開いた時に必要な分だけ取得）
         safeFetch(db.from("pickups").select("*"), []),
         safeFetch(db.from("announcements").select("*").eq("active", true), []),
         safeFetch(db.from("ai_master_spots").select("*"), []),
@@ -343,7 +367,6 @@ async function initApp() {
       }
 
       if (users) allUsersData = users;
-      if (comments) commentsData = comments;
       if (pickups) pickupsData = pickups;
       if (news && news.length > 0) announcementsData = news;
       if (aiSpots) aiMasterSpotsData = aiSpots;
@@ -470,32 +493,59 @@ async function fetchPostsPaged(reset = false) {
 // ★ 複数枚画像のStorageアップロード
 // ====================================================
 async function uploadMultipleImagesToStorage(base64Array) {
-  if (!db || !base64Array || base64Array.length === 0) return [];
+  if (!base64Array || base64Array.length === 0) return [];
   const urls = [];
 
   for (let i = 0; i < base64Array.length; i++) {
     try {
       const b64 = base64Array[i];
-      const byteString = atob(b64.split(',')[1]);
-      const ab = new ArrayBuffer(byteString.length);
-      const ia = new Uint8Array(ab);
-      for (let j = 0; j < byteString.length; j++) ia[j] = byteString.charCodeAt(j);
-      const blob = new Blob([ab], { type: 'image/jpeg' });
 
-      const fileName = `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}.jpg`;
-      const filePath = `spots/${fileName}`;
+      // ★ Cloudinaryが設定されている場合はCloudinaryへ直接アップロード
+      if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_CLOUD_NAME !== "あなたのCloudNameを入力") {
+        const formData = new FormData();
+        formData.append("file", b64);
+        formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
-      const { error: uploadError } = await db.storage
-        .from('post_images')
-        .upload(filePath, blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: "POST",
+          body: formData
+        });
+        const cData = await res.json();
 
-      if (!uploadError) {
-        const { data } = db.storage.from('post_images').getPublicUrl(filePath);
-        urls.push(data.publicUrl);
-      } else {
-        urls.push(b64);
+        if (cData.secure_url) {
+          urls.push(cData.secure_url);
+          continue;
+        }
       }
+
+      // Cloudinary未設定時のSupabase Storageフォールバック
+      if (db) {
+        const isWebp = b64.startsWith("data:image/webp");
+        const mimeType = isWebp ? "image/webp" : "image/jpeg";
+        const ext = isWebp ? "webp" : "jpg";
+        const byteString = atob(b64.split(',')[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let j = 0; j < byteString.length; j++) ia[j] = byteString.charCodeAt(j);
+        const blob = new Blob([ab], { type: mimeType });
+
+        const fileName = `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+        const filePath = `spots/${fileName}`;
+
+        const { error: uploadError } = await db.storage
+          .from('post_images')
+          .upload(filePath, blob, { contentType: mimeType, cacheControl: '31536000', upsert: false });
+
+        if (!uploadError) {
+          const { data } = db.storage.from('post_images').getPublicUrl(filePath);
+          urls.push(data.publicUrl);
+          continue;
+        }
+      }
+
+      urls.push(b64);
     } catch (err) {
+      console.warn("画像アップロード失敗:", err);
       urls.push(base64Array[i]);
     }
   }
@@ -2577,12 +2627,20 @@ function openEditPostModal(post) {
 // ====================================================
 let currentActiveDetailPost = null;
 
-function openDetail(item) {
+async function openDetail(item) {
   currentActiveDetailPost = item;
   const content = document.getElementById("detailContent");
   if (!content) return;
   const isMine = currentUser && currentUser.userId === item.user_id;
   const isOfficial = currentUser && currentUser.is_admin;
+
+  // ★ オンデマンド取得：この投稿のコメントのみをDBから取得
+  if (db) {
+    const { data: dbCmts } = await db.from("comments").select("*").eq("post_id", item.id).order("created_at", { ascending: true });
+    if (dbCmts) {
+      commentsData = commentsData.filter(c => c.post_id !== item.id).concat(dbCmts);
+    }
+  }
   
   const postComments = commentsData.filter(c => c.post_id === item.id);
   const likes = parseArray(item.likes);
@@ -2843,7 +2901,7 @@ async function deleteComment(commentId) {
     await db.from("comments").delete().or(`id.eq.${commentId},parent_id.eq.${commentId}`);
   }
 }
-function openCommentsModal(post) {
+async function openCommentsModal(post) {
   const modal = document.getElementById("postCommentsModal");
   const list = document.getElementById("postCommentsModalList");
   const myAv = document.getElementById("commentBarMyAvatar");
@@ -2867,13 +2925,21 @@ function openCommentsModal(post) {
     const postComments = commentsData.filter(c => c.post_id === post.id);
     const rootComments = postComments.filter(c => !c.parent_id);
     list.innerHTML = renderCommentTreeHtml(rootComments, postComments, post.user_id);
-    // 詳細画面側の件数バッジも更新
     const cCountEl = document.getElementById("detailCommentCount");
     if (cCountEl) cCountEl.textContent = postComments.length;
   }
 
-  renderList();
   modal.classList.add("show");
+  list.innerHTML = `<div style="text-align:center; font-size:12px; color:#94a3b8; padding:20px 0;">コメントを読み込み中...</div>`;
+
+  // ★ 最新コメントを対象投稿のみ取得して描画
+  if (db) {
+    const { data: dbCmts } = await db.from("comments").select("*").eq("post_id", post.id).order("created_at", { ascending: true });
+    if (dbCmts) {
+      commentsData = commentsData.filter(c => c.post_id !== post.id).concat(dbCmts);
+    }
+  }
+  renderList();
 
   // 閉じるボタン
   safeOnClick("closeCommentsModalBtn", () => modal.classList.remove("show"));
@@ -3245,7 +3311,7 @@ function handleOpenMultiPostAction() {
   }
 }
 
-// 画像圧縮共通処理
+// 画像圧縮共通処理（WebP自動変換で容量を約1/4に超軽量化）
 function processImageFile(file, callback) {
   const reader = new FileReader();
   reader.onload = function(evt) {
@@ -3253,12 +3319,24 @@ function processImageFile(file, callback) {
     img.src = evt.target.result;
     img.onload = function() {
       const canvas = document.createElement("canvas");
-      const MAX = 800;
+      // スマホ画面に最適化（長辺720px）
+      const MAX = 720;
       let w = img.width, h = img.height;
-      if (w > MAX) { h *= MAX / w; w = MAX; }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      callback(canvas.toDataURL("image/jpeg", 0.75));
+      if (w > MAX || h > MAX) {
+        if (w > h) { h *= MAX / w; w = MAX; }
+        else { w *= MAX / h; h = MAX; }
+      }
+      canvas.width = Math.round(w);
+      canvas.height = Math.round(h);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // WebP形式に対応していればWebP（品質0.68）、非対応ならJPEGで出力
+      let dataUrl = canvas.toDataURL("image/webp", 0.68);
+      if (!dataUrl.startsWith("data:image/webp")) {
+        dataUrl = canvas.toDataURL("image/jpeg", 0.70);
+      }
+      callback(dataUrl);
     };
   };
   reader.readAsDataURL(file);
@@ -4950,6 +5028,9 @@ function renderStoriesList() {
           <div class="story-card-admin-row">
             <button type="button" class="story-card-admin-btn add-scene-btn"><i class="fa-solid fa-plus"></i> 追加</button>
             <button type="button" class="story-card-admin-btn manage-scenes-btn"><i class="fa-solid fa-list"></i> 管理</button>
+            <button type="button" class="story-card-admin-btn toggle-visibility-btn" title="${story.is_hidden ? '全体公開にする' : '隠し物語にする'}">
+              ${story.is_hidden ? '<i class="fa-solid fa-eye"></i> 公開' : '<i class="fa-solid fa-eye-slash"></i> 隠す'}
+            </button>
             <button type="button" class="story-card-admin-btn show-qr-btn"><i class="fa-solid fa-qrcode"></i> QR</button>
             <button type="button" class="story-card-admin-btn delete-story-btn" style="color:#ef4444;"><i class="fa-regular fa-trash-can"></i> 削除</button>
           </div>
@@ -4980,12 +5061,25 @@ function renderStoriesList() {
       };
     }
 
-    // 公式専用ボタン群のイベント設定...
-    const addSceneBtn = card.querySelector(".add-scene-btn");
-    if (addSceneBtn) {
-      addSceneBtn.onclick = (e) => {
+    // ★ 追加：公開 / 隠し物語（非公開）切り替えボタン処理
+    const toggleVisBtn = card.querySelector(".toggle-visibility-btn");
+    if (toggleVisBtn) {
+      toggleVisBtn.onclick = async (e) => {
         e.stopPropagation();
-        openAddSceneModal(story.id);
+        const nextState = !story.is_hidden;
+        const msg = nextState 
+          ? `「${story.title}」を【隠し物語（一覧非表示・合言葉/QR限定）】に変更しますか？`
+          : `「${story.title}」を【普通の物語（全ユーザーの一覧に表示）】に変更しますか？`;
+        if (!confirm(msg)) return;
+
+        story.is_hidden = nextState;
+        renderStoriesList();
+
+        if (db) {
+          await db.from("stories").update({ is_hidden: nextState }).eq("id", story.id);
+        }
+
+        alert(nextState ? "🔒 隠し物語（非公開）に変更しました。" : "🌐 全体公開の普通の物語に変更しました！");
       };
     }
     const delStoryBtn = card.querySelector(".delete-story-btn");
