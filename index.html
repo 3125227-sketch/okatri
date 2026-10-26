@@ -736,12 +736,20 @@
 
       <div class="form-group">
         <label>背景画像（Supabaseへ自動保存）</label>
+        <!-- ★ 追加: 使用済み背景から選択 -->
+        <select id="sceneBgPresetSelect" style="margin-bottom:6px; font-size:12px;">
+          <option value="">▼ この物語内の使用済み背景から選ぶ</option>
+        </select>
         <input type="file" id="sceneBgFileInput" accept="image/*">
         <input type="url" id="sceneBgUrlInput" placeholder="または画像URLを直接入力" style="margin-top:6px;">
       </div>
 
       <div class="form-group">
         <label>キャラクター立ち絵（透過PNG推奨・Supabaseへ自動保存）</label>
+        <!-- ★ 追加: 使用済み立ち絵から選択 -->
+        <select id="sceneCharaPresetSelect" style="margin-bottom:6px; font-size:12px;">
+          <option value="">▼ この物語内の使用済み立ち絵から選ぶ</option>
+        </select>
         <input type="file" id="sceneCharaFileInput" accept="image/*">
         <input type="url" id="sceneCharaUrlInput" placeholder="または画像URLを直接入力" style="margin-top:6px;">
       </div>

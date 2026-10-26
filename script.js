@@ -272,6 +272,7 @@ let storyScenesData = [];
 let currentStory = null;
 let currentStoryScenes = [];
 let currentSceneIndex = 0;
+let storyLogHistory = [];
 let userStoryProgressData = JSON.parse(localStorage.getItem("okatari_story_progress") || "{}");
 
 // 複数画像ファイル管理
@@ -4895,10 +4896,11 @@ function renderStoriesList() {
 
   const isOfficial = currentUser && currentUser.is_admin;
 
-  // ★ 修正：公式アカウント（管理者）なら非公開（is_hidden）も含めて全表示
+  // ★ 修正：公式アカウント、または一度開いてプレイした隠し物語（進捗があるもの）は一覧に残す
   let list = storiesData.filter(s => {
     if (isOfficial) return true;
-    return !s.is_hidden;
+    const hasOpened = userStoryProgressData && userStoryProgressData[s.id];
+    return !s.is_hidden || hasOpened;
   });
 
   // まだ登録がない場合のフォールバック（初期表示用）
@@ -5020,35 +5022,35 @@ function renderStoriesList() {
     container.appendChild(card);
   });
 }
-// 会話ログ履歴配列
-let storyLogHistory = [];
-
+// ★ 修正：重複宣言を削除し、現在までに到達した全会話からログを生成（閉じても消えなくなります）
 function openStoryLogModal() {
   const modal = document.getElementById("storyLogOverlay");
   const list = document.getElementById("storyLogList");
   if (!modal || !list) return;
 
   list.innerHTML = "";
-  if (storyLogHistory.length === 0) {
+
+  // 最初のシーンから現在のシーンまでに読んだ会話セリフをすべて抽出
+  const readScenes = (currentStoryScenes || []).slice(0, currentSceneIndex + 1);
+  const dialogueScenes = readScenes.filter(s => s.text && s.text.trim() !== "");
+
+  if (dialogueScenes.length === 0) {
     list.innerHTML = `<div class="empty-state" style="padding:40px 0;">まだ会話履歴はありません</div>`;
   } else {
-    storyLogHistory.forEach(item => {
+    dialogueScenes.forEach(s => {
       const row = document.createElement("div");
       row.className = "story-log-item";
       row.innerHTML = `
-        <div class="story-log-speaker">${item.speaker}</div>
-        <div class="story-log-text">${item.text}</div>
+        <div class="story-log-speaker">${s.speaker_name || "？？？"}</div>
+        <div class="story-log-text">${s.text}</div>
       `;
       list.appendChild(row);
     });
   }
 
-  // ★ 修正：物語モーダル(#storyModal)より前面に出るよう z-index と show クラスを付与
   modal.style.zIndex = "100000";
   modal.style.display = "flex";
   modal.classList.add("show");
-
-  // ログの最下部へ自動スクロール
   list.scrollTop = list.scrollHeight;
 }
 
@@ -5131,6 +5133,9 @@ window.startStory = function(storyId) {
   document.getElementById("storyLogOverlay").style.display = "none";
   document.getElementById("storyModal").classList.add("show");
   renderCurrentScene();
+  // ★ 追加：開いた物語を進捗に記録し、一覧を再描画（隠し物語が一覧に残るようになります）
+  saveStoryProgress(storyId, currentSceneIndex, prog.is_completed || false);
+  renderStoriesList();
 };
 
 function renderCurrentScene() {
@@ -5159,14 +5164,6 @@ function renderCurrentScene() {
   const badge = document.getElementById("storySpeakerBadge");
   if (badge) badge.textContent = scene.speaker_name || "？？？";
   typewriterStoryText(scene.text || "");
-
-  // 会話シーンのセリフをログ履歴に追加
-  if (scene.text) {
-    storyLogHistory.push({
-      speaker: scene.speaker_name || "？？？",
-      text: scene.text
-    });
-  }
 
   // 4. ミッション画面の制御（GPSまたは謎解き）
   const overlay = document.getElementById("storyMissionOverlay");
@@ -5447,6 +5444,30 @@ function openAddSceneModal(storyId) {
   document.getElementById("sceneTypeSelect").value = "dialogue";
   document.getElementById("sceneCheckinFields").style.display = "none";
   document.getElementById("sceneQuizFields").style.display = "none";
+  // ★ 追加：この物語内で既に使用されている背景・立ち絵を選択肢にセット
+  const bgPresetSelect = document.getElementById("sceneBgPresetSelect");
+  const charaPresetSelect = document.getElementById("sceneCharaPresetSelect");
+  if (bgPresetSelect) {
+    bgPresetSelect.innerHTML = '<option value="">▼ この物語内の使用済み背景から選ぶ</option>';
+    const usedBgs = [...new Set(storyScenesData.filter(s => s.story_id === storyId && s.bg_image_url).map(s => s.bg_image_url))];
+    usedBgs.forEach((url, idx) => {
+      bgPresetSelect.innerHTML += `<option value="${url}">背景 ${idx + 1}: ${url.split('/').pop().substring(0, 25)}</option>`;
+    });
+    bgPresetSelect.onchange = (e) => {
+      if (e.target.value) document.getElementById("sceneBgUrlInput").value = e.target.value;
+    };
+  }
+
+  if (charaPresetSelect) {
+    charaPresetSelect.innerHTML = '<option value="">▼ この物語内の使用済み立ち絵から選ぶ</option>';
+    const usedCharas = [...new Set(storyScenesData.filter(s => s.story_id === storyId && s.chara_image_url).map(s => s.chara_image_url))];
+    usedCharas.forEach((url, idx) => {
+      charaPresetSelect.innerHTML += `<option value="${url}">立ち絵 ${idx + 1}: ${url.split('/').pop().substring(0, 25)}</option>`;
+    });
+    charaPresetSelect.onchange = (e) => {
+      if (e.target.value) document.getElementById("sceneCharaUrlInput").value = e.target.value;
+    };
+  }
   document.getElementById("addStorySceneModal").classList.add("show");
 }
 
